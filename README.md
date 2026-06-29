@@ -49,7 +49,7 @@ coordiation of UNMP3 side attachment??? for file management operations and  .rem
 
 NOTE currently possible issue with filespace on drive, not sure resource issues with fl itself but could exist... likely not IDEAL to keep loaded in projects when not in use???
 
-
+ability to delete entries?? or right click specific file operations??? 
 Attribution for the hours of hard work I put into overseeing this project developed are always appreciated.
 
 
