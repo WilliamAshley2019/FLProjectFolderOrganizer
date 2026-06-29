@@ -44,8 +44,10 @@ could extend this to presets in general need to consider
 
 .wav search etc.. functions
 
-coordiation of UNMP3 side attachment??? for file management operations and  .remeta extraction and writes to files or id3 management of .mp3s in the database
+coordiation of UNMP3 side attachment??? for file management operations and  .remeta extraction and writes to files or id3 management of .mp3s in the database  perhaps open additional side tab or something to display the metadata information files or any useful information from files clicked???? 
 
+
+NOTE currently possible issue with filespace on drive, not sure resource issues with fl itself but could exist... likely not IDEAL to keep loaded in projects when not in use???
 
 
 Attribution for the hours of hard work I put into overseeing this project developed are always appreciated.
