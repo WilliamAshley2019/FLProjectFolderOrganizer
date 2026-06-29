@@ -87,7 +87,7 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 
     // Title
     addAndMakeVisible(titleLabel);
-    titleLabel.setText("FL Studio Project Organizer", juce::dontSendNotification);
+    titleLabel.setText("FL Project Organizer", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(28.0f, juce::Font::bold)));
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
