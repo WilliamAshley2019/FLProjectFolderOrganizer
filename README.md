@@ -2,7 +2,9 @@ it is a vst3 effect that is simply a way I chose to build it , it likely works s
 able to be loaded as vst3 plugins rather than programs loaded outside of the program.
 
 
-Build info - JUCE 8.0.12 may work standalone havn't tested it.  (this requires a few extra modules beyond plugin basics - such as the cryptographic module.. if you encounter build errors try throwing in a few more modules :) 100% remember that one though.
+Build info - JUCE 8.0.12 may work standalone havn't tested it.  (this requires a few extra modules beyond plugin basics - such as the cryptographic module.. if you encounter build errors try throwing in a few more modules :) 100% remember that one though.  There are hashing function - in fact this juce project does quite a bit of file operations in general and may be a nice base to add database operations and file management functions for other purposes.
+
+
 used visual studio 2026 to compile
 
 only tested on windows.
