@@ -37,6 +37,17 @@ I think this is a great start to a good database managmement too for FL - it is 
 
 If you do adapt this please notify me so I can check out your project and see what you are doing with it.
 
+
+consider expanding this to .fst or other file types used by fl studio to help organize and find those also... need to consider way of correlating fst type to plugin type likely in the fst itself  
+
+could extend this to presets in general need to consider
+
+.wav search etc.. functions
+
+coordiation of UNMP3 side attachment??? for file management operations and  .remeta extraction and writes to files or id3 management of .mp3s in the database
+
+
+
 Attribution for the hours of hard work I put into overseeing this project developed are always appreciated.
 
 
