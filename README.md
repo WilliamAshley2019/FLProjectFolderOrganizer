@@ -2,7 +2,7 @@ it is a vst3 effect that is simply a way I chose to build it , it likely works s
 able to be loaded as vst3 plugins rather than programs loaded outside of the program.
 
 
-Build info - JUCE 8.0.12 may work standalone havn't tested it.
+Build info - JUCE 8.0.12 may work standalone havn't tested it.  (this requires a few extra modules beyond plugin basics - such as the cryptographic module.. if you encounter build errors try throwing in a few more modules :) 100% remember that one though.
 used visual studio 2026 to compile
 
 only tested on windows.
