@@ -50,7 +50,7 @@ coordiation of UNMP3 side attachment??? for file management operations and  .rem
 NOTE currently possible issue with filespace on drive, not sure resource issues with fl itself but could exist... likely not IDEAL to keep loaded in projects when not in use???
 
 ability to delete entries?? or right click specific file operations??? 
-Attribution for the hours of hard work I put into overseeing this project developed are always appreciated.
+Attribution for the hours of hard work I put into overseeing this project developed are always appreciated.  :) (this was made in one waking day 2026-06-29) 
 
 
 However the line about doing good and sharing etc.. and all that other hippy stuff from Dr. Hipp is pretty nice too.
