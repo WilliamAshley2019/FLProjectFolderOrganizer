@@ -21,7 +21,8 @@ for other purposes such as data base management, determining project creation da
 you can copy  the files to a newfolder orgaization  I made it so that it would move flp projects made with a version to a folder dedicated to that version on the major release number
 
 I should add fl 2 and fl to the list currently starts at fl3
-
+TO ADD function to open projects from the plugin itself in a the "version" fl studio it was made in??? link to fl64 exe or other launch .exe version ... should try to add this
+transforms it from a search and organize tool to a proper file management system.
 there is an option to delete the original files after moving but I left this something you had to click to enable cause it could delete your files perhaps if somethign weird happened.
 
 TO add maybe a double confirmation to delete as one layer of protection had me think someone is going to mess this up and delete all their flp files.
