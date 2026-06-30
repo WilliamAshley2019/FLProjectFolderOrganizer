@@ -1,3 +1,10 @@
+Version 3 added - basic plugin manager scan - intent to add editing capability for trouble shooting however quite basic at this point. 
+to do still add .wav and .mp3 scan to create a master usable database for samples and mp3 etc.. files, and ability to interact with the for unmp3 . remeta analysis and
+metadata extractio and tagging. 
+
+to do add script functions to powershell to run some scripts to organize or do specific useful functions with the database. 
+
+
 (note the project showing up as C is due to the size of the sqlite.c file which is massive compared to the rest of the code it is indeed a juce C++ project wtih only the one .c file for the sqlite stuff.
 Version 2 (second time typing this as second power outage this morning just struck while typing): what is new
 
