@@ -5,6 +5,7 @@
 #include "FLPScanner.h"
 #include "ProjectDatabase.h"
 #include "FLInstallationScanner.h"
+#include "PluginDatabaseWindow.h"
 
 class FLProjectOrganizerEditor : public juce::AudioProcessorEditor,
     private juce::Timer
@@ -61,7 +62,7 @@ private:
 
     // Action buttons
     juce::TextButton scanBtn, organizeBtn, stopBtn;
-    juce::TextButton exportCSVBtn, undoBtn;
+    juce::TextButton exportCSVBtn, undoBtn, pluginDbBtn;
 
     // Results display
     juce::TableListBox resultTable;

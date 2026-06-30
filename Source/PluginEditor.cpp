@@ -100,7 +100,7 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
     addAndMakeVisible(versionLabel);
-    versionLabel.setText("v1.0.0", juce::dontSendNotification);
+    versionLabel.setText("v1.0.2", juce::dontSendNotification);
     versionLabel.setFont(juce::Font(juce::FontOptions(14.0f)));
     versionLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
 
@@ -188,6 +188,14 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     undoBtn.setButtonText("Undo Last");
     undoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFAA44FF));
     undoBtn.onClick = [this] { undoLastOperation(); };
+
+    addAndMakeVisible(pluginDbBtn);
+    pluginDbBtn.setButtonText("Plugin Database");
+    pluginDbBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00)); // phosphor orange
+    // PluginDatabaseWindow deletes itself in closeButtonPressed() -- standard
+    // JUCE idiom for a non-modal, self-owned top-level window launched from
+    // a button click.
+    pluginDbBtn.onClick = [this] { new PluginDatabaseWindow(); };
 
     // Status and progress
     addAndMakeVisible(statusLabel);
@@ -319,8 +327,10 @@ void FLProjectOrganizerEditor::resized()
     exportCSVBtn.setBounds(buttonRow.removeFromLeft(100));
     buttonRow.removeFromLeft(10);
     undoBtn.setBounds(buttonRow.removeFromLeft(100));
-    buttonRow.removeFromLeft(50);
-    statusLabel.setBounds(buttonRow.removeFromLeft(200));
+    buttonRow.removeFromLeft(10);
+    pluginDbBtn.setBounds(buttonRow.removeFromLeft(140));
+    buttonRow.removeFromLeft(20);
+    statusLabel.setBounds(buttonRow.removeFromLeft(160));
     progressBar.setBounds(buttonRow.removeFromLeft(buttonRow.getWidth()));
 
     bounds.removeFromTop(10);
@@ -732,8 +742,9 @@ void FLProjectOrganizerEditor::refreshInstalledVersions()
 
     sendLog("Found " + juce::String((int)installedVersions.size()) + " FL Studio installation(s):");
     for (const auto& v : installedVersions)
-        sendLog("  - " + v.versionLabel + " at " + v.installFolder.getFullPathName() +
-            (v.registryConfirmed ? " [registry confirmed]" : ""));
+        sendLog("  - " + v.versionLabel + " (major v" + juce::String(v.majorVersion) + ") at " +
+            v.installFolder.getFullPathName() + " [exe: " + v.executablePath.getFileName() + "]" +
+            (v.registryConfirmed ? " [registry confirmed]" : " [not registry confirmed]"));
 }
 
 // ============================================================================
@@ -748,6 +759,15 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
     juce::File projectFile(entry.path);
 
     juce::PopupMenu menu;
+
+    // Non-actionable info rows -- shows exactly where this file lives
+    // and its hash, which isn't shown as a table column but is computed
+    // and stored for every scanned project.
+    menu.addItem(97, "Path: " + entry.path, false);
+    if (entry.hash.isNotEmpty())
+        menu.addItem(96, "SHA-256: " + entry.hash.substring(0, 16) + "...", false);
+    menu.addSeparator();
+
     menu.addItem(1, "Open Containing Folder");
 
     // Best-match FL Studio version, if any installs were found
@@ -761,7 +781,8 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
         bestMatch = FLInstallationScanner::FindBestMatch(installedVersions, projectMajor);
 
         if (bestMatch != nullptr)
-            menu.addItem(2, "Open with " + bestMatch->versionLabel);
+            menu.addItem(2, "Open with " + bestMatch->versionLabel +
+                "  (" + bestMatch->installFolder.getFullPathName() + ")");
 
         if (installedVersions.size() > 1)
         {
@@ -770,7 +791,8 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
             for (const auto& v : installedVersions)
             {
                 if (&v != bestMatch)
-                    otherVersions.addItem(itemId++, v.versionLabel);
+                    otherVersions.addItem(itemId++, v.versionLabel +
+                        "  (" + v.installFolder.getFullPathName() + ")");
             }
             if (otherVersions.getNumItems() > 0)
                 menu.addSubMenu("Open with...", otherVersions);
@@ -794,8 +816,11 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
             }
             else if (result == 2 && bestMatch != nullptr)
             {
+                sendLog("Attempting to launch: " + bestMatch->executablePath.getFullPathName());
                 if (!FLInstallationScanner::LaunchInstallation(*bestMatch, projectFile))
-                    sendLog("Failed to launch " + bestMatch->versionLabel);
+                    sendLog("Failed to launch " + bestMatch->versionLabel +
+                        " -- executable not found or failed to start at: " +
+                        bestMatch->executablePath.getFullPathName());
                 else
                     sendLog("Launched " + bestMatch->versionLabel + " with " + projectFile.getFileName());
             }
@@ -812,8 +837,11 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
                     if (&v == bestMatch) continue;
                     if (seen == index)
                     {
+                        sendLog("Attempting to launch: " + v.executablePath.getFullPathName());
                         if (!FLInstallationScanner::LaunchInstallation(v, projectFile))
-                            sendLog("Failed to launch " + v.versionLabel);
+                            sendLog("Failed to launch " + v.versionLabel +
+                                " -- executable not found or failed to start at: " +
+                                v.executablePath.getFullPathName());
                         else
                             sendLog("Launched " + v.versionLabel + " with " + projectFile.getFileName());
                         break;

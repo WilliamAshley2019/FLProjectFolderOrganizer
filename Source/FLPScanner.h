@@ -35,7 +35,7 @@ private:
     juce::File GetUniquePath(const juce::File& basePath);
     bool VerifyCopy(const juce::File& source, const juce::File& dest);
 
-    bool stopScanning = false;
+    std::atomic<bool> stopScanning { false };
     bool includeZips = true;
     bool scanSubfolders = true;
     bool isDryRun = true;

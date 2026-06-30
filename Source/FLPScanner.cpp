@@ -8,7 +8,7 @@
 #include <windows.h>
 #include <bcrypt.h>
 
-static juce::String sha256File(const juce::File& file)
+static juce::String sha256File(const juce::File& file, const std::atomic<bool>* abortFlag = nullptr)
 {
     BCRYPT_ALG_HANDLE hAlg  = nullptr;
     BCRYPT_HASH_HANDLE hHash = nullptr;
@@ -28,7 +28,11 @@ static juce::String sha256File(const juce::File& file)
         return {};
     }
 
-    // Feed file in 64KB chunks
+    // Feed file in 64KB chunks. Checking abortFlag between chunks means a
+    // huge file (multi-GB sample, etc.) can be interrupted within ~64KB
+    // of work instead of forcing the Stop button to wait for the entire
+    // file to finish hashing.
+    bool wasAborted = false;
     juce::FileInputStream fis(file);
     if (fis.openedOk())
     {
@@ -36,6 +40,12 @@ static juce::String sha256File(const juce::File& file)
         juce::HeapBlock<BYTE> buf(kChunk);
         while (!fis.isExhausted())
         {
+            if (abortFlag != nullptr && abortFlag->load())
+            {
+                wasAborted = true;
+                break;
+            }
+
             int n = fis.read(buf, kChunk);
             if (n <= 0) break;
             BCryptHashData(hHash, buf, (ULONG)n, 0);
@@ -46,6 +56,9 @@ static juce::String sha256File(const juce::File& file)
     BCryptFinishHash(hHash, digest, 32, 0);
     BCryptDestroyHash(hHash);
     BCryptCloseAlgorithmProvider(hAlg, 0);
+
+    if (wasAborted)
+        return {}; // caller treats an empty hash as "incomplete, skip duplicate check"
 
     static const char* hex = "0123456789abcdef";
     for (int i = 0; i < 32; ++i)
@@ -183,6 +196,11 @@ void FLPScanner::ProcessFLP(const juce::File& flpFile, const juce::File& /*sourc
 
     entry.hash = CalculateFileHash(flpFile);
 
+    // If the hash got aborted partway through (huge file + Stop pressed),
+    // bail before touching the database or kicking off a copy/organize.
+    if (stopScanning.load())
+        return;
+
     CheckForDuplicates(entry);
 
     if (dbInitialized)
@@ -214,6 +232,9 @@ void FLPScanner::ProcessZIP(const juce::File& zipFile, const juce::File& /*sourc
     entry.version      = version.isNotEmpty() ? version : "Unknown";
     entry.groupName    = version.isNotEmpty() ? VersionDetector::GetVersionGroup(version) : "Unknown";
     entry.hash         = CalculateFileHash(zipFile);
+
+    if (stopScanning.load())
+        return;
 
     CheckForDuplicates(entry);
 
@@ -247,7 +268,7 @@ void FLPScanner::ProcessZIP(const juce::File& zipFile, const juce::File& /*sourc
 
 juce::String FLPScanner::CalculateFileHash(const juce::File& file)
 {
-    return sha256File(file);
+    return sha256File(file, &stopScanning);
 }
 
 juce::String FLPScanner::CalculateMemoryHash(const juce::MemoryBlock& data)
@@ -277,6 +298,13 @@ void FLPScanner::CheckForDuplicates(const ProjectDatabase::ProjectEntry& entry)
 
 void FLPScanner::OrganizeProject(const ProjectDatabase::ProjectEntry& entry, const juce::File& destDir)
 {
+    // Note: juce::File::copyFileTo() is a single blocking OS call with no
+    // interruption hook, so a Stop press can't abort mid-copy of one huge
+    // file -- but this check stops the queue between files, which covers
+    // the common case of many files queued after Stop was pressed.
+    if (stopScanning.load())
+        return;
+
     try
     {
         juce::File sourceFile(entry.path);

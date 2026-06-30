@@ -116,14 +116,18 @@ bool FLInstallationScanner::LaunchInstallation(const Installation& install, cons
     if (!install.executablePath.existsAsFile())
         return false;
 
-    juce::StringArray args;
-    args.add(install.executablePath.getFullPathName());
-
+    // File::startAsProcess() wraps the OS's native "launch this" call
+    // (ShellExecute on Windows) and is the standard JUCE way to fire off
+    // an external application without keeping a handle to monitor it --
+    // unlike juce::ChildProcess, which is meant for processes whose
+    // lifetime/output you intend to track from this app, and whose
+    // stack-object destruction semantics are not what we want here for
+    // a simple "open FL Studio" action.
+    juce::String params;
     if (projectToOpen.existsAsFile())
-        args.add(projectToOpen.getFullPathName());
+        params = "\"" + projectToOpen.getFullPathName() + "\"";
 
-    juce::ChildProcess process;
-    return process.start(args);
+    return install.executablePath.startAsProcess(params);
 }
 
 bool FLInstallationScanner::OpenInstallFolderInExplorer(const Installation& install)
