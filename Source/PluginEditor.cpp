@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "RecycleBinManager.h"
 
 // ============================================================================
 // Result Table Model Implementation
@@ -74,12 +75,19 @@ void FLProjectOrganizerEditor::ResultTableModel::sortOrderChanged(int newSortCol
     parent.updateResultTable();
 }
 
+void FLProjectOrganizerEditor::ResultTableModel::cellClicked(
+    int rowNumber, int /*columnId*/, const juce::MouseEvent& event)
+{
+    if (event.mods.isPopupMenu() && rowNumber >= 0 && rowNumber < (int)displayRows.size())
+        parent.showRowContextMenu(rowNumber, event.getScreenPosition());
+}
+
 // ============================================================================
 // Editor Implementation
 // ============================================================================
 
 FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& p)
-    : AudioProcessorEditor(&p), processorRef(p)  // Removed progressBar from initializer
+    : AudioProcessorEditor(&p), processorRef(p)
 {
     lnf = std::make_unique<FLPLookAndFeel>();
     setLookAndFeel(lnf.get());
@@ -209,8 +217,13 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     logBox.setFont(juce::Font(juce::FontOptions(12.0f)));
 
     // Initialize database
-    auto dbFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("FLProjectOrganizer/projects.db");
+    // Stored under Documents\WAM\FLProjectOrganizer\ -- same root the
+    // RecycleBinManager and FLPScanner use, since this is third-party
+    // tooling rather than Image-Line's own FL Studio data tree.
+    auto dbFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        .getChildFile("WAM")
+        .getChildFile("FLProjectOrganizer")
+        .getChildFile("projects.db");
     dbFile.getParentDirectory().createDirectory();
 
     dbInitialized = database.Initialize(dbFile);
@@ -231,6 +244,10 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 
     // Load existing projects from database
     refreshDatabaseView();
+
+    // Phase 3: discover installed FL Studio versions for the right-click
+    // "Open With" / "Open Install Folder" context menu.
+    refreshInstalledVersions();
 
     startTimerHz(30);
 }
@@ -526,7 +543,8 @@ void FLProjectOrganizerEditor::startOrganize()
                 scanner->Scan(source, dest,
                     includeZipsToggle.getToggleState(),
                     scanSubfoldersToggle.getToggleState(),
-                    dryRunToggle.getToggleState());
+                    dryRunToggle.getToggleState(),
+                    deleteOriginalsToggle.getToggleState());
                 updateUIState();
             });
         return;
@@ -544,24 +562,53 @@ void FLProjectOrganizerEditor::startOrganize()
         scanner->Scan(source, dest,
             includeZipsToggle.getToggleState(),
             scanSubfoldersToggle.getToggleState(),
-            dryRunToggle.getToggleState());
+            dryRunToggle.getToggleState(),
+            deleteOriginalsToggle.getToggleState());
         updateUIState();
     };
 
     if (deleteOriginalsToggle.getToggleState())
     {
+        // First confirmation: plain warning.
         juce::AlertWindow::showAsync(
             juce::MessageBoxOptions()
                 .withIconType(juce::MessageBoxIconType::WarningIcon)
                 .withTitle("Confirm Delete")
-                .withMessage("WARNING: You are about to delete original files after copying.\n"
-                             "This operation cannot be undone.\n\nContinue?")
-                .withButton("Delete")
+                .withMessage("WARNING: You are about to move original files to the\n"
+                             "FL Organizer recycle bin after copying.\n\n"
+                             "Files are NOT permanently deleted -- they go to:\n" +
+                             RecycleBinManager().GetRecycleBinRoot().getFullPathName() +
+                             "\n\nContinue?")
+                .withButton("Continue")
                 .withButton("Cancel"),
-            [launchOrganize](int result)
+            [this, launchOrganize](int result)
             {
-                if (result == 1)  // 1 = Delete (first button)
-                    launchOrganize();
+                if (result != 1)  // 1 = Continue (first button)
+                    return;
+
+                // Second confirmation: type-to-confirm, the strongest guard
+                // against an accidental click wiping out a project folder.
+                auto* typeConfirmWindow = new juce::AlertWindow(
+                    "Final Confirmation Required",
+                    "Type DELETE below to confirm moving originals to the recycle bin.\n"
+                    "This is your last chance to back out.",
+                    juce::MessageBoxIconType::WarningIcon);
+
+                typeConfirmWindow->addTextEditor("confirmText", "", "Type DELETE here:");
+                typeConfirmWindow->addButton("Confirm", 1, juce::KeyPress(juce::KeyPress::returnKey));
+                typeConfirmWindow->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+                typeConfirmWindow->enterModalState(true,
+                    juce::ModalCallbackFunction::create(
+                        [typeConfirmWindow, launchOrganize](int result2)
+                        {
+                            auto typed = typeConfirmWindow->getTextEditorContents("confirmText");
+                            if (result2 == 1 && typed.trim().equalsIgnoreCase("DELETE"))
+                                launchOrganize();
+                            // typeConfirmWindow is owned by the modal manager and
+                            // cleaned up automatically after the callback runs.
+                        }),
+                    true);
             });
         return;
     }
@@ -668,4 +715,111 @@ void FLProjectOrganizerEditor::undoLastOperation()
         juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
             "Undo Failed", "Could not undo the last operation.");
     }
+}
+
+// ============================================================================
+// Refresh Installed FL Studio Versions (Phase 3)
+// ============================================================================
+void FLProjectOrganizerEditor::refreshInstalledVersions()
+{
+    installedVersions = installScanner.ScanForInstallations();
+
+    if (installedVersions.empty())
+    {
+        sendLog("No FL Studio installations found on this system.");
+        return;
+    }
+
+    sendLog("Found " + juce::String((int)installedVersions.size()) + " FL Studio installation(s):");
+    for (const auto& v : installedVersions)
+        sendLog("  - " + v.versionLabel + " at " + v.installFolder.getFullPathName() +
+            (v.registryConfirmed ? " [registry confirmed]" : ""));
+}
+
+// ============================================================================
+// Right-Click Context Menu for Result Table Rows (Phase 3)
+// ============================================================================
+void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int> screenPosition)
+{
+    if (rowNumber < 0 || rowNumber >= (int)tableModel->displayRows.size())
+        return;
+
+    const auto& entry = tableModel->displayRows[(size_t)rowNumber];
+    juce::File projectFile(entry.path);
+
+    juce::PopupMenu menu;
+    menu.addItem(1, "Open Containing Folder");
+
+    // Best-match FL Studio version, if any installs were found
+    const FLInstallationScanner::Installation* bestMatch = nullptr;
+    if (!installedVersions.empty())
+    {
+        int projectMajor = entry.groupName.startsWith("FL")
+            ? entry.groupName.substring(2).getIntValue()
+            : entry.version.upToFirstOccurrenceOf(".", false, false).getIntValue();
+
+        bestMatch = FLInstallationScanner::FindBestMatch(installedVersions, projectMajor);
+
+        if (bestMatch != nullptr)
+            menu.addItem(2, "Open with " + bestMatch->versionLabel);
+
+        if (installedVersions.size() > 1)
+        {
+            juce::PopupMenu otherVersions;
+            int itemId = 100;
+            for (const auto& v : installedVersions)
+            {
+                if (&v != bestMatch)
+                    otherVersions.addItem(itemId++, v.versionLabel);
+            }
+            if (otherVersions.getNumItems() > 0)
+                menu.addSubMenu("Open with...", otherVersions);
+        }
+    }
+    else
+    {
+        menu.addItem(3, "No FL Studio installations found (click to rescan)");
+    }
+
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
+        juce::Rectangle<int>(screenPosition, screenPosition)),
+        [this, projectFile, bestMatch](int result)
+        {
+            if (result == 0)
+                return;
+
+            if (result == 1)
+            {
+                projectFile.getParentDirectory().startAsProcess();
+            }
+            else if (result == 2 && bestMatch != nullptr)
+            {
+                if (!FLInstallationScanner::LaunchInstallation(*bestMatch, projectFile))
+                    sendLog("Failed to launch " + bestMatch->versionLabel);
+                else
+                    sendLog("Launched " + bestMatch->versionLabel + " with " + projectFile.getFileName());
+            }
+            else if (result == 3)
+            {
+                refreshInstalledVersions();
+            }
+            else if (result >= 100)
+            {
+                int index = result - 100;
+                int seen = 0;
+                for (const auto& v : installedVersions)
+                {
+                    if (&v == bestMatch) continue;
+                    if (seen == index)
+                    {
+                        if (!FLInstallationScanner::LaunchInstallation(v, projectFile))
+                            sendLog("Failed to launch " + v.versionLabel);
+                        else
+                            sendLog("Launched " + v.versionLabel + " with " + projectFile.getFileName());
+                        break;
+                    }
+                    ++seen;
+                }
+            }
+        });
 }

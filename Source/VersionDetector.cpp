@@ -62,12 +62,16 @@ VersionDetector::VersionInfo VersionDetector::DetectVersionFromData(const juce::
         }
     }
 
-    // Try older FL version pattern: major.minor.patch
+    // Try older FL version pattern: major.minor.patch (FL2 through FL19,
+    // e.g. FruityLoops 2's "2.0.0" string embedded right after the FLdt
+    // chunk header). Gated at >=2 rather than >=1 -- FL1 had no embedded
+    // version string at all, so a "1.x.x" match here would almost always
+    // be a false positive from unrelated binary data, not a real version.
     std::regex oldPattern(R"((\d+)\.(\d+)\.(\d+))");
     if (std::regex_search(stdData, matches, oldPattern))
     {
         int major = std::stoi(matches[1]);
-        if (major >= 3 && major <= 19)
+        if (major >= 2 && major <= 19)
         {
             info.versionString = juce::String(matches[0].str());
             info.isValid = true;
@@ -75,11 +79,25 @@ VersionDetector::VersionInfo VersionDetector::DetectVersionFromData(const juce::
         }
     }
 
-    // Try looking for version near FLhd/FLdt markers
+    // Try looking for version near FLhd/FLdt markers (catches version
+    // strings JUCE's regexes above might have missed due to odd spacing
+    // in the chunk data).
     std::regex markerPattern(R"(FLh[d][^\d]*(\d+\.\d+\.\d+(?:\.\d+)?))");
     if (std::regex_search(stdData, matches, markerPattern))
     {
         info.versionString = juce::String(matches[1].str());
+        info.isValid = true;
+        return info;
+    }
+
+    // FruityLoops 1 fallback: these files carry the FLhd/FLdt chunk
+    // markers but embed no version string whatsoever -- there was nothing
+    // to parse in FL1's project format. If we can see the markers but
+    // found no number above, classify it explicitly as FL1 rather than
+    // letting it fall through to "Unknown".
+    if (stdData.find("FLhd") != std::string::npos && stdData.find("FLdt") != std::string::npos)
+    {
+        info.versionString = "1.0.0";
         info.isValid = true;
         return info;
     }
@@ -112,7 +130,9 @@ juce::String VersionDetector::GetVersionGroup(const juce::String& versionString)
         { "6.", "FL6", 6 },
         { "5.", "FL5", 5 },
         { "4.", "FL4", 4 },
-        { "3.", "FL3", 3 }
+        { "3.", "FL3", 3 },
+        { "2.", "FL2", 2 },
+        { "1.", "FL1", 1 }
     };
 
     for (const auto& mapping : mappings)
@@ -148,7 +168,9 @@ int VersionDetector::GetMajorVersion(const juce::String& versionString)
         { "6.", 6 },
         { "5.", 5 },
         { "4.", 4 },
-        { "3.", 3 }
+        { "3.", 3 },
+        { "2.", 2 },
+        { "1.", 1 }
     };
 
     for (const auto& mapping : mappings)

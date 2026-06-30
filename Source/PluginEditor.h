@@ -4,6 +4,7 @@
 #include "FLPLookAndFeel.h"
 #include "FLPScanner.h"
 #include "ProjectDatabase.h"
+#include "FLInstallationScanner.h"
 
 class FLProjectOrganizerEditor : public juce::AudioProcessorEditor,
     private juce::Timer
@@ -27,6 +28,7 @@ private:
         void paintRowBackground(juce::Graphics&, int rowNumber, int width, int height, bool rowIsSelected) override;
         void paintCell(juce::Graphics&, int rowNumber, int columnId, int width, int height, bool rowIsSelected) override;
         void sortOrderChanged(int newSortColumnId, bool isForwards) override;
+        void cellClicked(int rowNumber, int columnId, const juce::MouseEvent& event) override;
 
         std::vector<ProjectDatabase::ProjectEntry> displayRows;
 
@@ -78,6 +80,14 @@ private:
     // Database
     ProjectDatabase database;
     bool dbInitialized = false;
+
+    // FL Studio installation discovery (Phase 3) -- cached on editor
+    // construction so right-click "Open With" menus don't re-scan disk
+    // on every click.
+    FLInstallationScanner installScanner;
+    std::vector<FLInstallationScanner::Installation> installedVersions;
+    void refreshInstalledVersions();
+    void showRowContextMenu(int rowNumber, juce::Point<int> screenPosition);
 
     // UI state
     bool isScanning = false;

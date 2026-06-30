@@ -3,6 +3,7 @@
 #include "VersionDetector.h"
 #include "ZIPHandler.h"
 #include "ProjectDatabase.h"
+#include "RecycleBinManager.h"
 
 class FLPScanner : public juce::Thread
 {
@@ -11,7 +12,7 @@ public:
     ~FLPScanner() override;
 
     void Scan(const juce::File& sourceDir, const juce::File& destDir,
-        bool includeZips, bool scanSubfolders, bool dryRun);
+        bool includeZips, bool scanSubfolders, bool dryRun, bool deleteOriginalsAfterCopy = false);
     void StopScanning();
 
     std::function<void(const juce::String&)> onLog;
@@ -38,6 +39,7 @@ private:
     bool includeZips = true;
     bool scanSubfolders = true;
     bool isDryRun = true;
+    bool deleteOriginals = false;
     juce::File sourceDirectory;
     juce::File destinationDirectory;
 
@@ -48,6 +50,7 @@ private:
 
     ProjectDatabase database;
     bool dbInitialized = false;
+    RecycleBinManager recycleBin;
 
     void sendLog(const juce::String& msg);
     void sendProgress(float progress);
