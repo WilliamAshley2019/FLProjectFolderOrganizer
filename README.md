@@ -1,3 +1,6 @@
+WARNING. this is test only do not USE DELETE function it may be collating non .flp files still and if move function may move then to a different folder which for c:\ etc.. may move important files to a folder that will NOT be good... so do not use this currently to delete files if you are scanning adirectory with files that should not be deleted or moved, I still need to test how this is working wihtout testing it on my own system ... cause it might delete files I need so I will likely block off files if they are system files etc.. and stuffages. 
+
+
 Version 3 added - basic plugin manager scan - intent to add editing capability for trouble shooting however quite basic at this point. 
 to do still add .wav and .mp3 scan to create a master usable database for samples and mp3 etc.. files, and ability to interact with the for unmp3 . remeta analysis and
 metadata extractio and tagging. 
@@ -7,7 +10,7 @@ bugs to fix - the tabs are not collating alphanumerically.
 not able to switch version from synth to effect via right click currnetly read only mode, need to change database entries to write / edit mode so incorrect assignment
 bug for synth / effect can be easily fixed.
 
-
+bug - files are being added to scan as "unknown" when not flp not good if someone adds an important directory, need to block 
 
 (note the project showing up as C is due to the size of the sqlite.c file which is massive compared to the rest of the code it is indeed a juce C++ project wtih only the one .c file for the sqlite stuff.
 Version 2 (second time typing this as second power outage this morning just struck while typing): what is new
