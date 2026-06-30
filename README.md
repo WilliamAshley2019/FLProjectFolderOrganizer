@@ -1,3 +1,4 @@
+(note the project showing up as C is due to the size of the sqlite.c file which is massive compared to the rest of the code it is indeed a juce C++ project wtih only the one .c file for the sqlite stuff.
 Version 2 (second time typing this as second power outage this morning just struck while typing): what is new
 
 1. right click interfaces to open in a specific version of FL or the project folder
