@@ -3,6 +3,10 @@ to do still add .wav and .mp3 scan to create a master usable database for sample
 metadata extractio and tagging. 
 
 to do add script functions to powershell to run some scripts to organize or do specific useful functions with the database. 
+bugs to fix - the tabs are not collating alphanumerically. 
+not able to switch version from synth to effect via right click currnetly read only mode, need to change database entries to write / edit mode so incorrect assignment
+bug for synth / effect can be easily fixed.
+
 
 
 (note the project showing up as C is due to the size of the sqlite.c file which is massive compared to the rest of the code it is indeed a juce C++ project wtih only the one .c file for the sqlite stuff.
