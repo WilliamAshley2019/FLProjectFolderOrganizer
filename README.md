@@ -1,3 +1,23 @@
+Version 2 (second time typing this as second power outage this morning just struck while typing): what is new
+
+1. right click interfaces to open in a specific version of FL or the project folder
+2. added fl1 and fl2 support / detection that wasn't added in the original verison
+3. moved hash display off the main display
+4. removed "Studio" from plugin name to avoid any direct branding confusion
+5. added recycling bin to insure no default file deletions, extra protection layer to accidental unrecoverable file deletions located in documents/WAM folder created context of WAM folder
+6.  hardrive space check to prevent operations that cannot complete due to space restrictions
+7.  moved database from appdata to /documents/WAM for easier access
+8.  
+
+To Add: 
+1. move flp to project folders rather than loose
+2. update v. number :) to 1.0.1
+3. add plugin database interaction
+4. add sample .wav/.mp3 interaction with tie in to UNMP3 functions such as sample analysis and metadata modification
+
+   
+
+
 This is an FL organization tool for managing FL Studio projects and related audio files. It originated from a JUCE-based prototype implemented as a VST3 effect that can also run standalone; the JUCE project includes file operations and hashing utilities and may be a useful base for adding database and file-management features.
 
 
