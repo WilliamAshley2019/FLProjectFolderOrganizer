@@ -1,3 +1,16 @@
+VERSION 4: changes
+1. more safety mechanisms were added to reduce the risk of deleting files by accident, read only and system files now get filterd to a "protected folder" still need to test this, not sure how to yet. Likely need to make some read only files for testing purposes and maybe duplicated a system file or something. Still buggy. only really practical for cleaning.
+2. added the ability to edit some plugin entries, still limited. need to test if it effects what catagories the plugins show up in, it will likely be reset on fl studio rescan
+
+   TO ADD:
+   a. include that export as csv will keep all atrritubes and "replace attributes" from the .csv on csv import so that settings such as type can be reset.
+   b. the ability to have the "plugin version number"  displayed if possible so you know the specific build of the plugin if it is accessible via vst host infos.
+   c. the  option to right click "delete entry and plugin." so the plugin entry in the data base .nfo / .fst and associated vst file/folder is also deleted with right click interaction
+   
+   
+4. 
+
+
 WARNING. this is test only do not USE DELETE function it may be collating non .flp files still and if move function may move then to a different folder which for c:\ etc.. may move important files to a folder that will NOT be good... so do not use this currently to delete files if you are scanning adirectory with files that should not be deleted or moved, I still need to test how this is working wihtout testing it on my own system ... cause it might delete files I need so I will likely block off files if they are system files etc.. and stuffages. 
 
 
