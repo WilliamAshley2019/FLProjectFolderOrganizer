@@ -67,6 +67,8 @@ public:
         PluginType   type = PluginType::Unknown;
         EntrySource  source = EntrySource::Favorites;
 
+        juce::File sourceIniFile;   // which .Plugins.ini this entry came from (Installed only)
+
         juce::File fstFile;
         juce::File nfoFile;   // may not exist
         juce::File imageFile; // .png or .bmp, may not exist
@@ -121,6 +123,39 @@ public:
 
     static juce::String ReadNfoRawText(const PluginEntry& entry);
     static bool WriteNfoRawText(const PluginEntry& entry, const juce::String& newText);
+
+    // --- Installed tree editing (troubleshooting) ---
+    //
+    // Rewrites the ps_file_vendorname_0, ps_file_category_0, and
+    // ps_file_plugclass_0 fields for an Installed entry's FIRST file
+    // record in-place within its .Plugins.ini file, preserving every
+    // other key/value and every other section untouched. Does NOT move
+    // the .fst file or rename the section path -- this edits the
+    // database record only.
+    //
+    // Before writing, a timestamped backup of the entire .Plugins.ini
+    // is created alongside it (e.g. ".Plugins.ini.backup_20260701_1200")
+    // so a bad edit can be manually restored by copying the backup back
+    // over the original.
+    //
+    // ps_file_plugclass_0 is FL Studio's internal numeric code for
+    // plugin type/behavior (observed values include 0, 2, 4, 8, 11 in
+    // sample data, but the full meaning of each value is not
+    // independently documented anywhere we could verify). We expose it
+    // as an editable raw number rather than a friendly dropdown, since
+    // presenting invented label names for codes we don't have a
+    // verified spec for would be worse than showing the raw value
+    // honestly. After editing, FL Studio may need to rescan/refresh its
+    // plugin list to pick up the change -- this only edits the cached
+    // database, not FL Studio's live state.
+    //
+    // Returns false if the section can't be found, the ini can't be
+    // backed up, or the write fails. On success, entry's in-memory
+    // fileRecords[0] fields are updated to match.
+    bool WriteInstalledEntryFields(PluginEntry& entry,
+        const juce::String& newVendor,
+        const juce::String& newCategory,
+        int newPlugClass);
 
 private:
     void ScanFavoritesFolder(const juce::File& typeRoot, PluginType type, std::vector<PluginEntry>& results);

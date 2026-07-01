@@ -149,15 +149,59 @@ void FLPScanner::StopScanning()
     stopScanning = true;
 }
 
+void FLPScanner::FindFilesSkippingBlockedDirs(const juce::File& dir, bool recurse,
+    const juce::StringArray& extensions, juce::Array<juce::File>& foundFiles)
+{
+    if (stopScanning.load())
+        return;
+
+    if (SafeFileOperations::IsBlockedDirectory(dir))
+        return; // never even list contents of a blocked directory
+
+    for (const auto& item : juce::RangedDirectoryIterator(dir, false,
+        "*", juce::File::findFilesAndDirectories))
+    {
+        if (stopScanning.load())
+            return;
+
+        juce::File f = item.getFile();
+
+        if (f.isDirectory())
+        {
+            if (recurse)
+                FindFilesSkippingBlockedDirs(f, true, extensions, foundFiles);
+            continue;
+        }
+
+        for (const auto& ext : extensions)
+        {
+            if (f.getFileExtension().trimCharactersAtStart(".").equalsIgnoreCase(ext))
+            {
+                foundFiles.add(f);
+                break;
+            }
+        }
+    }
+}
+
 void FLPScanner::run()
 {
     sendLog("Starting scan of: " + sourceDirectory.getFullPathName());
 
+    if (SafeFileOperations::IsBlockedDirectory(sourceDirectory))
+    {
+        sendLog("REFUSED: The selected source folder is itself a protected system "
+            "directory (Windows, Program Files, or a reserved OS folder). "
+            "Please choose a different folder.");
+        sendProgress(1.0f);
+        return;
+    }
+
     juce::Array<juce::File> flpFiles, zipFiles;
 
-    sourceDirectory.findChildFiles(flpFiles, juce::File::findFiles, scanSubfolders, "*.flp");
+    FindFilesSkippingBlockedDirs(sourceDirectory, scanSubfolders, { "flp" }, flpFiles);
     if (includeZips)
-        sourceDirectory.findChildFiles(zipFiles, juce::File::findFiles, scanSubfolders, "*.zip");
+        FindFilesSkippingBlockedDirs(sourceDirectory, scanSubfolders, { "zip" }, zipFiles);
 
     int total     = flpFiles.size() + zipFiles.size();
     int processed = 0;
@@ -308,6 +352,24 @@ void FLPScanner::OrganizeProject(const ProjectDatabase::ProjectEntry& entry, con
     try
     {
         juce::File sourceFile(entry.path);
+
+        // Defense in depth: even though the scan itself never descends
+        // into blocked directories, double-check here too before doing
+        // anything destructive/mutating, in case entry.path was somehow
+        // populated from another source (e.g. a future direct-path
+        // feature) rather than the guarded scan walk.
+        if (SafeFileOperations::RequiresProtectedFileConfirmation(sourceFile))
+        {
+            protectedFiles.push_back({ sourceFile.getFullPathName(),
+                SafeFileOperations::GetProtectionReason(sourceFile) });
+            if (onProtectedFileFound)
+                onProtectedFileFound(protectedFiles.back());
+
+            sendLog("SKIPPED (protected file): " + sourceFile.getFullPathName() + " -- " +
+                SafeFileOperations::GetProtectionReason(sourceFile));
+            return;
+        }
+
         juce::File versionFolder = destDir.getChildFile(entry.groupName);
         juce::File destFile      = versionFolder.getChildFile(sourceFile.getFileName());
 
@@ -351,7 +413,11 @@ void FLPScanner::OrganizeProject(const ProjectDatabase::ProjectEntry& entry, con
             // deleteOriginals is ever set true.
             if (deleteOriginals)
             {
-                if (recycleBin.SoftDelete(sourceFile))
+                if (SafeFileOperations::RequiresProtectedFileConfirmation(sourceFile))
+                {
+                    sendLog("REFUSED to delete protected file: " + sourceFile.getFullPathName());
+                }
+                else if (recycleBin.SoftDelete(sourceFile))
                 {
                     sendLog("Moved original to recycle bin: " + sourceFile.getFullPathName());
 

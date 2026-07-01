@@ -185,9 +185,8 @@ void PluginDatabaseComponent::showRowContextMenu(int rowNumber, juce::Point<int>
     }
     else
     {
-        menu.addItem(3, "View .nfo Text (read-only)", entry.nfoFile.existsAsFile());
-        menu.addSeparator();
-        menu.addItem(5, "Installed entries are read-only", false);
+        menu.addItem(6, "Edit Entry (vendor / category / type)");
+        menu.addItem(3, "View .nfo Text", entry.nfoFile.existsAsFile());
     }
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
@@ -228,6 +227,10 @@ void PluginDatabaseComponent::showRowContextMenu(int rowNumber, juce::Point<int>
             {
                 showNfoEditor(entry);
             }
+            else if (result == 6)
+            {
+                showEntryEditor(entry);
+            }
             else if (result == 4)
             {
                 juce::AlertWindow::showAsync(
@@ -260,49 +263,251 @@ void PluginDatabaseComponent::showRowContextMenu(int rowNumber, juce::Point<int>
 void PluginDatabaseComponent::showNfoEditor(const PluginDatabaseManager::PluginEntry& entry)
 {
     bool readOnly = (entry.source == PluginDatabaseManager::EntrySource::Installed);
+    new NfoEditorWindow(entry, readOnly);
+}
 
-    auto* editorWindow = new juce::AlertWindow(
-        ".nfo: " + entry.name,
-        readOnly
-            ? "Raw text content (read-only -- this entry belongs to the Installed "
-              "database indexed by .Plugins.ini)."
-            : "Raw text content. Field format is not independently verified, "
-              "so this is shown/edited as plain text rather than parsed fields.",
-        juce::MessageBoxIconType::NoIcon);
+// ============================================================================
+// PluginDatabaseWindow
+// ============================================================================
 
-    juce::String currentText = PluginDatabaseManager::ReadNfoRawText(entry);
-
-    editorWindow->addTextEditor("nfoText", currentText, "");
-    if (auto* ed = editorWindow->getTextEditor("nfoText"))
+void PluginDatabaseComponent::showEntryEditor(const PluginDatabaseManager::PluginEntry& entry)
+{
+    new PluginEntryEditorWindow(databaseManager, entry, [this]
     {
-        ed->setMultiLine(true);
-        ed->setReturnKeyStartsNewLine(true);
-        ed->setReadOnly(readOnly);
-        ed->setSize(500, 300);
-    }
+        refreshFromDisk();
+    });
+}
 
-    if (readOnly)
+// ============================================================================
+// PluginEntryEditorComponent
+// ============================================================================
+
+PluginEntryEditorComponent::PluginEntryEditorComponent(PluginDatabaseManager& managerIn,
+    PluginDatabaseManager::PluginEntry entryIn, std::function<void()> onSavedCallback)
+    : manager(managerIn), entry(std::move(entryIn)), onSaved(std::move(onSavedCallback))
+{
+    setSize(560, 400);
+    addAndMakeVisible(titleLabel);
+    titleLabel.setText("Edit Plugin Database Entry", juce::dontSendNotification);
+    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
+
+    addAndMakeVisible(pathLabel);
+    pathLabel.setText(entry.sourceIniFile.getFullPathName(), juce::dontSendNotification);
+    pathLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+    pathLabel.setFont(juce::Font(juce::FontOptions(11.0f)));
+
+    addAndMakeVisible(warningLabel);
+    warningLabel.setText(
+        "A timestamped backup of .Plugins.ini is created automatically before saving. "
+        "FL Studio may need to rescan plugins to pick up changes. plugclass is FL's "
+        "internal numeric type code -- its exact meaning per value is not independently "
+        "documented, so it's shown as a raw number rather than a guessed label.",
+        juce::dontSendNotification);
+    warningLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFFFAA00));
+    warningLabel.setFont(juce::Font(juce::FontOptions(11.0f)));
+    warningLabel.setJustificationType(juce::Justification::topLeft);
+
+    auto setupRow = [this](juce::Label& lbl, const juce::String& text)
     {
-        editorWindow->addButton("Close", 0);
-        editorWindow->enterModalState(true, nullptr, true);
+        addAndMakeVisible(lbl);
+        lbl.setText(text, juce::dontSendNotification);
+        lbl.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    };
+
+    setupRow(nameLabel, "Name:");
+    addAndMakeVisible(nameValue);
+    nameValue.setText(entry.name, juce::dontSendNotification);
+    nameValue.setColour(juce::Label::textColourId, juce::Colours::white);
+
+    juce::String currentVendor   = entry.fileRecords.empty() ? juce::String() : entry.fileRecords[0].vendorName;
+    juce::String currentCategory = entry.fileRecords.empty() ? juce::String() : entry.fileRecords[0].category;
+    int currentPlugClass         = entry.fileRecords.empty() ? -1 : entry.fileRecords[0].plugClass;
+
+    setupRow(vendorLabel, "Vendor:");
+    addAndMakeVisible(vendorEditor);
+    vendorEditor.setText(currentVendor);
+
+    setupRow(categoryLabel, "Category:");
+    addAndMakeVisible(categoryEditor);
+    categoryEditor.setText(currentCategory);
+
+    setupRow(plugClassLabel, "Plug Class (raw code):");
+    addAndMakeVisible(plugClassEditor);
+    plugClassEditor.setText(juce::String(currentPlugClass));
+    plugClassEditor.setInputRestrictions(6, "-0123456789");
+
+    addAndMakeVisible(saveBtn);
+    saveBtn.setButtonText("Save (writes to .Plugins.ini)");
+    saveBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
+    saveBtn.onClick = [this] { doSave(); };
+
+    addAndMakeVisible(cancelBtn);
+    cancelBtn.setButtonText("Cancel");
+    cancelBtn.onClick = [this]
+    {
+        if (closeRequested)
+            closeRequested();
+    };
+}
+
+void PluginEntryEditorComponent::resized()
+{
+    auto bounds = getLocalBounds().reduced(15);
+
+    titleLabel.setBounds(bounds.removeFromTop(26));
+    bounds.removeFromTop(4);
+    pathLabel.setBounds(bounds.removeFromTop(18));
+    bounds.removeFromTop(10);
+    warningLabel.setBounds(bounds.removeFromTop(60));
+    bounds.removeFromTop(15);
+
+    auto row = [&](juce::Label& lbl, juce::Component& field)
+    {
+        auto r = bounds.removeFromTop(30);
+        lbl.setBounds(r.removeFromLeft(150));
+        field.setBounds(r);
+        bounds.removeFromTop(8);
+    };
+
+    row(nameLabel, nameValue);
+    row(vendorLabel, vendorEditor);
+    row(categoryLabel, categoryEditor);
+    row(plugClassLabel, plugClassEditor);
+
+    bounds.removeFromTop(15);
+    auto btnRow = bounds.removeFromTop(36);
+    saveBtn.setBounds(btnRow.removeFromLeft(220));
+    btnRow.removeFromLeft(10);
+    cancelBtn.setBounds(btnRow.removeFromLeft(100));
+}
+
+void PluginEntryEditorComponent::doSave()
+{
+    int plugClass = plugClassEditor.getText().getIntValue();
+
+    if (manager.WriteInstalledEntryFields(entry, vendorEditor.getText(), categoryEditor.getText(), plugClass))
+    {
+        if (onSaved)
+            onSaved();
+
+        if (closeRequested)
+            closeRequested();
     }
     else
     {
-        editorWindow->addButton("Save", 1);
-        editorWindow->addButton("Cancel", 0);
-
-        editorWindow->enterModalState(true,
-            juce::ModalCallbackFunction::create(
-                [editorWindow, entry](int result)
-                {
-                    if (result == 1)
-                    {
-                        auto newText = editorWindow->getTextEditorContents("nfoText");
-                        PluginDatabaseManager::WriteNfoRawText(entry, newText);
-                    }
-                }),
-            true);
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+            "Save Failed",
+            "Could not write changes to .Plugins.ini. The section may no longer exist "
+            "(try rescanning), or the backup copy could not be created.");
     }
+}
+
+// ============================================================================
+// PluginEntryEditorWindow
+// ============================================================================
+
+PluginEntryEditorWindow::PluginEntryEditorWindow(PluginDatabaseManager& manager,
+    const PluginDatabaseManager::PluginEntry& entry, std::function<void()> onSaved)
+    : DialogWindow("Edit: " + entry.name, juce::Colour(0xFF181818), true, true)
+{
+    setUsingNativeTitleBar(true);
+    auto* c = new PluginEntryEditorComponent(manager, entry, std::move(onSaved));
+    c->SetCloseRequestedCallback([this] { closeButtonPressed(); });
+    setContentOwned(c, true);
+    centreWithSize(560, 400);
+    setResizable(false, false);
+    setVisible(true);
+}
+
+void PluginEntryEditorWindow::closeButtonPressed()
+{
+    setVisible(false);
+    delete this;
+}
+
+// ============================================================================
+// NfoEditorComponent / Window
+// ============================================================================
+
+NfoEditorComponent::NfoEditorComponent(PluginDatabaseManager::PluginEntry entryIn, bool readOnlyIn)
+    : entry(std::move(entryIn)), readOnly(readOnlyIn)
+{
+    setSize(600, 450);
+
+    addAndMakeVisible(titleLabel);
+    titleLabel.setText(
+        (readOnly ? juce::String(".nfo (read-only): ") : juce::String(".nfo: ")) + entry.name,
+        juce::dontSendNotification);
+    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    titleLabel.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
+
+    addAndMakeVisible(textEditor);
+    textEditor.setMultiLine(true);
+    textEditor.setReturnKeyStartsNewLine(true);
+    textEditor.setReadOnly(readOnly);
+    textEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xFF111111));
+    textEditor.setColour(juce::TextEditor::textColourId, juce::Colours::lightgrey);
+    textEditor.setFont(juce::Font(juce::FontOptions(13.0f)));
+    textEditor.setText(PluginDatabaseManager::ReadNfoRawText(entry));
+
+    if (!readOnly)
+    {
+        addAndMakeVisible(saveBtn);
+        saveBtn.setButtonText("Save");
+        saveBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
+        saveBtn.onClick = [this]
+        {
+            PluginDatabaseManager::WriteNfoRawText(entry, textEditor.getText());
+            if (closeRequested)
+                closeRequested();
+        };
+    }
+
+    addAndMakeVisible(closeBtn);
+    closeBtn.setButtonText(readOnly ? "Close" : "Cancel");
+    closeBtn.onClick = [this]
+    {
+        if (closeRequested)
+            closeRequested();
+    };
+}
+
+void NfoEditorComponent::resized()
+{
+    auto bounds = getLocalBounds().reduced(15);
+
+    titleLabel.setBounds(bounds.removeFromTop(24));
+    bounds.removeFromTop(8);
+
+    auto btnRow = bounds.removeFromBottom(36);
+    if (!readOnly)
+    {
+        saveBtn.setBounds(btnRow.removeFromLeft(100));
+        btnRow.removeFromLeft(10);
+    }
+    closeBtn.setBounds(btnRow.removeFromLeft(100));
+
+    bounds.removeFromBottom(8);
+    textEditor.setBounds(bounds);
+}
+
+NfoEditorWindow::NfoEditorWindow(const PluginDatabaseManager::PluginEntry& entry, bool readOnly)
+    : DialogWindow(".nfo Editor", juce::Colour(0xFF181818), true, true)
+{
+    setUsingNativeTitleBar(true);
+    auto* c = new NfoEditorComponent(entry, readOnly);
+    c->SetCloseRequestedCallback([this] { closeButtonPressed(); });
+    setContentOwned(c, true);
+    centreWithSize(600, 450);
+    setResizable(true, true);
+    setVisible(true);
+}
+
+void NfoEditorWindow::closeButtonPressed()
+{
+    setVisible(false);
+    delete this;
 }
 
 // ============================================================================

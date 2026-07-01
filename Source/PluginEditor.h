@@ -6,6 +6,8 @@
 #include "ProjectDatabase.h"
 #include "FLInstallationScanner.h"
 #include "PluginDatabaseWindow.h"
+#include "ProtectedFilesWindow.h"
+#include "SampleScannerWindow.h"
 
 class FLProjectOrganizerEditor : public juce::AudioProcessorEditor,
     private juce::Timer
@@ -62,7 +64,7 @@ private:
 
     // Action buttons
     juce::TextButton scanBtn, organizeBtn, stopBtn;
-    juce::TextButton exportCSVBtn, undoBtn, pluginDbBtn;
+    juce::TextButton exportCSVBtn, undoBtn, pluginDbBtn, protectedFilesBtn, sampleScannerBtn;
 
     // Results display
     juce::TableListBox resultTable;
@@ -86,6 +88,7 @@ private:
     // construction so right-click "Open With" menus don't re-scan disk
     // on every click.
     FLInstallationScanner installScanner;
+    std::vector<FLPScanner::ProtectedFileEntry> protectedFilesFound;
     std::vector<FLInstallationScanner::Installation> installedVersions;
     void refreshInstalledVersions();
     void showRowContextMenu(int rowNumber, juce::Point<int> screenPosition);

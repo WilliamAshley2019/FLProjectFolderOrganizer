@@ -100,7 +100,7 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
     addAndMakeVisible(versionLabel);
-    versionLabel.setText("v1.0.2", juce::dontSendNotification);
+    versionLabel.setText("v1.0.4", juce::dontSendNotification);
     versionLabel.setFont(juce::Font(juce::FontOptions(14.0f)));
     versionLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
 
@@ -196,6 +196,20 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     // JUCE idiom for a non-modal, self-owned top-level window launched from
     // a button click.
     pluginDbBtn.onClick = [this] { new PluginDatabaseWindow(); };
+
+    addAndMakeVisible(protectedFilesBtn);
+    protectedFilesBtn.setButtonText("Protected Files");
+    protectedFilesBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF4444));
+    protectedFilesBtn.onClick = [this]
+    {
+        auto* win = new ProtectedFilesWindow();
+        win->SetEntries(protectedFilesFound);
+    };
+
+    addAndMakeVisible(sampleScannerBtn);
+    sampleScannerBtn.setButtonText("Sample Scanner");
+    sampleScannerBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
+    sampleScannerBtn.onClick = [this] { new SampleScannerWindow(); };
 
     // Status and progress
     addAndMakeVisible(statusLabel);
@@ -316,7 +330,7 @@ void FLProjectOrganizerEditor::resized()
 
     bounds.removeFromTop(10);
 
-    // Action buttons
+    // Action buttons -- primary row
     auto buttonRow = bounds.removeFromTop(40);
     scanBtn.setBounds(buttonRow.removeFromLeft(100));
     buttonRow.removeFromLeft(10);
@@ -327,11 +341,19 @@ void FLProjectOrganizerEditor::resized()
     exportCSVBtn.setBounds(buttonRow.removeFromLeft(100));
     buttonRow.removeFromLeft(10);
     undoBtn.setBounds(buttonRow.removeFromLeft(100));
-    buttonRow.removeFromLeft(10);
-    pluginDbBtn.setBounds(buttonRow.removeFromLeft(140));
     buttonRow.removeFromLeft(20);
-    statusLabel.setBounds(buttonRow.removeFromLeft(160));
+    statusLabel.setBounds(buttonRow.removeFromLeft(200));
     progressBar.setBounds(buttonRow.removeFromLeft(buttonRow.getWidth()));
+
+    bounds.removeFromTop(8);
+
+    // Secondary row -- tool-launch buttons
+    auto toolRow = bounds.removeFromTop(36);
+    pluginDbBtn.setBounds(toolRow.removeFromLeft(140));
+    toolRow.removeFromLeft(10);
+    protectedFilesBtn.setBounds(toolRow.removeFromLeft(180));
+    toolRow.removeFromLeft(10);
+    sampleScannerBtn.setBounds(toolRow.removeFromLeft(160));
 
     bounds.removeFromTop(10);
 
@@ -501,6 +523,15 @@ void FLProjectOrganizerEditor::startScan()
         {
             sendLog("DUPLICATE: " + file1 + " == " + file2);
         };
+    scanner->onProtectedFileFound = [this](const FLPScanner::ProtectedFileEntry& e)
+        {
+            juce::MessageManager::callAsync([this, e]
+            {
+                protectedFilesFound.push_back(e);
+                protectedFilesBtn.setButtonText("Protected Files (" +
+                    juce::String((int)protectedFilesFound.size()) + ")");
+            });
+        };
 
     scanner->Scan(source, juce::File(destPathEditor.getText()),
         includeZipsToggle.getToggleState(),
@@ -550,6 +581,15 @@ void FLProjectOrganizerEditor::startOrganize()
                 {
                     juce::MessageManager::callAsync([this] { refreshDatabaseView(); });
                 };
+                scanner->onProtectedFileFound = [this](const FLPScanner::ProtectedFileEntry& e)
+                {
+                    juce::MessageManager::callAsync([this, e]
+                    {
+                        protectedFilesFound.push_back(e);
+                        protectedFilesBtn.setButtonText("Protected Files (" +
+                            juce::String((int)protectedFilesFound.size()) + ")");
+                    });
+                };
                 scanner->Scan(source, dest,
                     includeZipsToggle.getToggleState(),
                     scanSubfoldersToggle.getToggleState(),
@@ -568,6 +608,15 @@ void FLProjectOrganizerEditor::startOrganize()
         scanner->onProjectFound = [this](const ProjectDatabase::ProjectEntry&)
         {
             juce::MessageManager::callAsync([this] { refreshDatabaseView(); });
+        };
+        scanner->onProtectedFileFound = [this](const FLPScanner::ProtectedFileEntry& e)
+        {
+            juce::MessageManager::callAsync([this, e]
+            {
+                protectedFilesFound.push_back(e);
+                protectedFilesBtn.setButtonText("Protected Files (" +
+                    juce::String((int)protectedFilesFound.size()) + ")");
+            });
         };
         scanner->Scan(source, dest,
             includeZipsToggle.getToggleState(),

@@ -8,7 +8,7 @@ public:
     FLProjectOrganizerApplication() {}
 
     const juce::String getApplicationName() override { return "FL Studio Project Organizer"; }
-    const juce::String getApplicationVersion() override { return "1.0.0"; }
+    const juce::String getApplicationVersion() override { return "1.0.4"; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
     void initialise(const juce::String& commandLine) override

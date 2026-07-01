@@ -1,4 +1,5 @@
 #include "PluginDatabaseManager.h"
+#include "SafeFileOperations.h"
 
 juce::File PluginDatabaseManager::GetDefaultDatabaseRoot()
 {
@@ -68,7 +69,8 @@ void PluginDatabaseManager::ScanInstalledIni(const juce::File& root, std::vector
                 continue;
 
             PluginEntry entry;
-            entry.sectionPath = section.name;
+            entry.sectionPath  = section.name;
+            entry.sourceIniFile = iniFile;
             entry.source       = EntrySource::Installed;
 
             if (pathParts[0].equalsIgnoreCase("Effects"))
@@ -272,18 +274,104 @@ bool PluginDatabaseManager::DeleteEntry(const PluginEntry& entry, RecycleBinMana
     if (entry.source != EntrySource::Favorites)
         return false; // Installed entries are intentionally not deletable from here
 
+    auto safeSoftDelete = [&recycleBin](const juce::File& f) -> bool
+    {
+        if (!f.existsAsFile())
+            return true;
+        if (SafeFileOperations::RequiresProtectedFileConfirmation(f))
+            return false; // refuse -- this should be unreachable in practice
+                          // since plugin database entries never live under
+                          // a blocked system directory, but we check anyway
+        return recycleBin.SoftDelete(f);
+    };
+
     bool allOk = true;
-
-    if (entry.fstFile.existsAsFile())
-        allOk = recycleBin.SoftDelete(entry.fstFile) && allOk;
-
-    if (entry.nfoFile.existsAsFile())
-        allOk = recycleBin.SoftDelete(entry.nfoFile) && allOk;
-
-    if (entry.imageFile.existsAsFile())
-        allOk = recycleBin.SoftDelete(entry.imageFile) && allOk;
+    allOk = safeSoftDelete(entry.fstFile)   && allOk;
+    allOk = safeSoftDelete(entry.nfoFile)   && allOk;
+    allOk = safeSoftDelete(entry.imageFile) && allOk;
 
     return allOk;
+}
+
+bool PluginDatabaseManager::WriteInstalledEntryFields(PluginEntry& entry,
+    const juce::String& newVendor, const juce::String& newCategory, int newPlugClass)
+{
+    if (entry.source != EntrySource::Installed)
+        return false;
+
+    if (!entry.sourceIniFile.existsAsFile())
+        return false;
+
+    // Backup first, always -- a bad write to this file can make FL
+    // Studio think plugins are missing/changed until it rescans.
+    auto timestamp = juce::Time::getCurrentTime().formatted("%Y%m%d_%H%M%S");
+    juce::File backup = entry.sourceIniFile.getSiblingFile(
+        entry.sourceIniFile.getFileName() + ".backup_" + timestamp);
+
+    if (!entry.sourceIniFile.copyFileTo(backup))
+        return false; // refuse to edit if we couldn't secure a backup first
+
+    juce::String content = entry.sourceIniFile.loadFileAsString();
+    auto lines = juce::StringArray::fromLines(content);
+
+    // Find the [section] line matching entry.sectionPath, then find and
+    // rewrite (or insert) the three target keys only within that
+    // section's line range. Everything else -- other sections, other
+    // keys within this section, comments, blank lines -- passes through
+    // untouched.
+    juce::String targetHeader = "[" + entry.sectionPath + "]";
+    int sectionStart = -1, sectionEnd = lines.size();
+
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        if (lines[i].trim() == targetHeader)
+        {
+            sectionStart = i;
+            continue;
+        }
+        if (sectionStart >= 0 && i > sectionStart &&
+            lines[i].trim().startsWith("[") && lines[i].trim().endsWith("]"))
+        {
+            sectionEnd = i;
+            break;
+        }
+    }
+
+    if (sectionStart < 0)
+        return false; // section not found -- ini may have changed since scan; caller should rescan
+
+    auto setOrInsertKey = [&](const juce::String& key, const juce::String& value)
+    {
+        for (int i = sectionStart + 1; i < sectionEnd; ++i)
+        {
+            if (lines[i].trim().startsWithIgnoreCase(key + "="))
+            {
+                lines.set(i, key + "=" + value);
+                return;
+            }
+        }
+        // Key not present in this section -- insert right after the header.
+        lines.insert(sectionStart + 1, key + "=" + value);
+        ++sectionEnd; // shift since we just grew the array
+    };
+
+    setOrInsertKey("ps_file_vendorname_0", newVendor);
+    setOrInsertKey("ps_file_category_0", newCategory);
+    setOrInsertKey("ps_file_plugclass_0", juce::String(newPlugClass));
+
+    juce::String newContent = lines.joinIntoString("\n");
+
+    if (!entry.sourceIniFile.replaceWithText(newContent))
+        return false;
+
+    if (!entry.fileRecords.empty())
+    {
+        entry.fileRecords[0].vendorName = newVendor;
+        entry.fileRecords[0].category   = newCategory;
+        entry.fileRecords[0].plugClass  = newPlugClass;
+    }
+
+    return true;
 }
 
 juce::String PluginDatabaseManager::ReadNfoRawText(const PluginEntry& entry)
