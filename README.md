@@ -1,4 +1,4 @@
-VERSION 5: changes
+VERSION 5: changes - this version is a little unstable with plugin database launch - this is known and being fixed hopefully for the next update, plugin database will load but takes longer with more plugins. If you click cancel rather than end task it should load, and it loads in a seperate popup window.  
 1. the addition of plugin management was started in the plugin manager allowing the removal of plugins from the database - this is not yet clean
 2. version number of the plugins are provided if available via the PE call, this should be a helpful tool to know the version number of the plugin you are using
 3. corrected the sort order for each column in plugin manager now sorts alphabetically and including type/groups
