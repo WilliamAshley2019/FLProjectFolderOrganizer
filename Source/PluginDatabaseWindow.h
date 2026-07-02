@@ -27,6 +27,7 @@ private:
         void paintRowBackground(juce::Graphics&, int rowNumber, int width, int height, bool rowIsSelected) override;
         void paintCell(juce::Graphics&, int rowNumber, int columnId, int width, int height, bool rowIsSelected) override;
         void cellClicked(int rowNumber, int columnId, const juce::MouseEvent& event) override;
+        void sortOrderChanged(int newSortColumnId, bool isForwards) override;
 
         std::vector<PluginDatabaseManager::PluginEntry> rows;
 
@@ -37,6 +38,10 @@ private:
     void showRowContextMenu(int rowNumber, juce::Point<int> screenPosition);
     void showNfoEditor(const PluginDatabaseManager::PluginEntry& entry);
     void showEntryEditor(const PluginDatabaseManager::PluginEntry& entry);
+    void cycleEntryType(int rowNumber);
+    void confirmDeleteEntryAndPlugin(int rowNumber);
+    void exportCSV();
+    void importCSV();
 
     PluginDatabaseManager databaseManager;
     RecycleBinManager recycleBin;
@@ -44,12 +49,15 @@ private:
     juce::Label titleLabel;
     juce::Label statusLabel;
     juce::TextButton rescanBtn;
+    juce::TextButton exportCsvBtn, importCsvBtn;
     juce::ComboBox sourceFilterCombo;
     juce::TableListBox table;
     std::unique_ptr<TableModel> tableModel;
 
     std::vector<PluginDatabaseManager::PluginEntry> allRows; // unfiltered, from last scan
     void applySourceFilter();
+
+    std::unique_ptr<juce::FileChooser> csvChooser;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginDatabaseComponent)
 };

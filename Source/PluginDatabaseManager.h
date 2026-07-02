@@ -52,6 +52,11 @@ public:
         juce::String vendorName;
         juce::String category;      // e.g. "Instrument|Synth" or "Effect"
         juce::String formatType;    // VST / VST3 / CLAP / Fruity (native), derived from section path
+        juce::String versionString; // From the plugin binary's PE version resource (FileVersion),
+                                     // NOT from acting as a VST host -- we read the file's embedded
+                                     // Windows version info directly, which doesn't require loading
+                                     // or executing the plugin at all. Empty if unavailable (non-
+                                     // Windows, no version resource present, or file not found).
         int plugClass = -1;
         int bitSize   = -1;
         juce::String arch;
@@ -156,6 +161,63 @@ public:
         const juce::String& newVendor,
         const juce::String& newCategory,
         int newPlugClass);
+
+    // Reclassifies an INSTALLED entry between Generator/Effect. Unlike
+    // the Favorites-tree ReclassifyEntry, this is a heavier operation:
+    // it rewrites the [section] header in .Plugins.ini to move it under
+    // the other type's path, updates ps_presetfilename and
+    // ps_file_category_0 to a reasonable default ("Effect" or
+    // "Instrument" -- FL's actual category taxonomy has finer-grained
+    // values like "Instrument|Synth" that we don't have a verified
+    // mapping for, so we set the broad category and let the user refine
+    // it further via Edit Entry if needed), and physically moves the
+    // .fst/.nfo files to the new Installed\<Type>\<Format>\ folder.
+    // Backs up .Plugins.ini first, same as WriteInstalledEntryFields.
+    // Does NOT touch the underlying plugin DLL/VST3/CLAP file itself.
+    bool ReclassifyInstalledEntry(PluginEntry& entry, PluginType newType, const juce::File& databaseRoot = {});
+
+    // Deletes the database entry's .fst/.nfo/.png AND the actual
+    // underlying plugin binary (the .dll/.vst3/.clap file or bundle
+    // referenced by ps_file_filename_0), all via the recycle bin.
+    //
+    // This is the one operation in the whole app that, by explicit
+    // user-initiated action on a single named entry, is allowed to
+    // touch a file that may live under Program Files -- SafeFileOperations'
+    // blanket directory block is for automated bulk scan/organize
+    // operations, not this kind of precision single-target action. The
+    // caller (UI layer) is responsible for strong confirmation before
+    // calling this -- this method itself does not prompt.
+    //
+    // .Plugins.ini is deliberately NOT edited to remove the section --
+    // FL Studio will show the entry as missing/broken until it next
+    // rescans its plugin list, which is the same behavior as if you'd
+    // uninstalled the plugin outside of FL Studio entirely.
+    bool DeleteEntryAndPlugin(const PluginEntry& entry, RecycleBinManager& recycleBin);
+
+    // Returns the plugin binary's FileVersion string from its Windows
+    // PE version resource (e.g. "1.2.3.4"), or empty if unavailable.
+    // Reads the file's embedded version info directly -- does NOT load,
+    // instantiate, or execute the plugin.
+    static juce::String GetBinaryFileVersion(const juce::File& binaryFile);
+
+    // CSV export/import for bulk attribute editing.
+    //
+    // Export writes one row per entry currently in `entries` with
+    // columns: Source, Type, Name, Vendor, Category, PlugClass, Version,
+    // SectionPath, FstPath. Version is informational only (not
+    // re-imported, since it's read from the binary, not editable).
+    //
+    // Import reads that same format and, for each row, looks up the
+    // matching entry (by SectionPath for Installed rows, by FstPath for
+    // Favorites rows) and REPLACES Vendor/Category/PlugClass (Installed)
+    // or Type (both) with the CSV's values if they differ from the
+    // current on-disk state. Rows that don't match an existing entry
+    // are skipped and reported, not created as new entries -- this
+    // tool edits existing database entries, it doesn't fabricate new
+    // plugin registrations. Returns a human-readable summary string.
+    static bool ExportToCSV(const std::vector<PluginEntry>& entries, const juce::File& csvFile);
+    juce::String ImportFromCSV(const juce::File& csvFile, std::vector<PluginEntry>& entries,
+        const juce::File& databaseRoot = {});
 
 private:
     void ScanFavoritesFolder(const juce::File& typeRoot, PluginType type, std::vector<PluginEntry>& results);

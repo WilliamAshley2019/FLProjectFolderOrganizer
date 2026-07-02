@@ -34,19 +34,84 @@ void PluginDatabaseComponent::TableModel::paintCell(
         case 4: text = entry.GetPrimaryFormat(); break;
         case 5: text = entry.GetPrimaryVendor().isNotEmpty() ? entry.GetPrimaryVendor() : "--"; break;
         case 6: text = entry.GetPrimaryCategory().isNotEmpty() ? entry.GetPrimaryCategory() : "--"; break;
+        case 7: text = (!entry.fileRecords.empty() && entry.fileRecords[0].versionString.isNotEmpty())
+                    ? entry.fileRecords[0].versionString : "--"; break;
         default: break;
     }
 
-    g.setColour(rowIsSelected ? juce::Colours::white : juce::Colours::lightgrey);
+    // Type column is click-to-cycle -- give it a visual hint (orange,
+    // like the rest of the app's interactive accents) so it doesn't
+    // look identical to the plain-text columns.
+    if (columnId == 2)
+        g.setColour(juce::Colour(0xFFFF5C00));
+    else
+        g.setColour(rowIsSelected ? juce::Colours::white : juce::Colours::lightgrey);
+
     g.setFont(juce::Font(juce::FontOptions(13.0f)));
     g.drawText(text, 4, 0, width - 8, height, juce::Justification::centredLeft);
 }
 
 void PluginDatabaseComponent::TableModel::cellClicked(
-    int rowNumber, int /*columnId*/, const juce::MouseEvent& event)
+    int rowNumber, int columnId, const juce::MouseEvent& event)
 {
-    if (event.mods.isPopupMenu() && rowNumber >= 0 && rowNumber < (int)rows.size())
+    if (rowNumber < 0 || rowNumber >= (int)rows.size())
+        return;
+
+    if (event.mods.isPopupMenu())
+    {
         owner.showRowContextMenu(rowNumber, event.getScreenPosition());
+        return;
+    }
+
+    // Left-click on the Type column cycles Generator <-> Effect
+    // directly, as a quick alternative to the right-click menu. This
+    // only toggles between the two real states -- there's no on-disk
+    // "Unknown" location to write an entry into (Installed lives under
+    // Installed\Effects\ or Installed\Generators\, Favorites under
+    // Effects\ or Generators\), so an entry that already has a definite
+    // type never cycles through an Unknown state.
+    if (columnId == 2)
+        owner.cycleEntryType(rowNumber);
+}
+
+void PluginDatabaseComponent::TableModel::sortOrderChanged(int newSortColumnId, bool isForwards)
+{
+    std::sort(rows.begin(), rows.end(),
+        [newSortColumnId, isForwards](const PluginDatabaseManager::PluginEntry& a,
+            const PluginDatabaseManager::PluginEntry& b)
+        {
+            int result = 0;
+            switch (newSortColumnId)
+            {
+                case 1: result = a.name.compareNatural(b.name); break;
+                case 2:
+                {
+                    juce::String ta = (a.type == PluginDatabaseManager::PluginType::Generator) ? "Generator" : "Effect";
+                    juce::String tb = (b.type == PluginDatabaseManager::PluginType::Generator) ? "Generator" : "Effect";
+                    result = ta.compareNatural(tb);
+                    break;
+                }
+                case 3:
+                {
+                    juce::String sa = a.source == PluginDatabaseManager::EntrySource::Installed ? "Installed" : "Favorites";
+                    juce::String sb = b.source == PluginDatabaseManager::EntrySource::Installed ? "Installed" : "Favorites";
+                    result = sa.compareNatural(sb);
+                    break;
+                }
+                case 4: result = a.GetPrimaryFormat().compareNatural(b.GetPrimaryFormat()); break;
+                case 5: result = a.GetPrimaryVendor().compareNatural(b.GetPrimaryVendor()); break;
+                case 6: result = a.GetPrimaryCategory().compareNatural(b.GetPrimaryCategory()); break;
+                case 7:
+                {
+                    juce::String va = a.fileRecords.empty() ? juce::String() : a.fileRecords[0].versionString;
+                    juce::String vb = b.fileRecords.empty() ? juce::String() : b.fileRecords[0].versionString;
+                    result = va.compareNatural(vb);
+                    break;
+                }
+                default: result = 0;
+            }
+            return isForwards ? (result < 0) : (result > 0);
+        });
 }
 
 // ============================================================================
@@ -55,7 +120,7 @@ void PluginDatabaseComponent::TableModel::cellClicked(
 
 PluginDatabaseComponent::PluginDatabaseComponent()
 {
-    setSize(1050, 650);
+    setSize(1050, 690);
 
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Plugin Database", juce::dontSendNotification);
@@ -77,6 +142,16 @@ PluginDatabaseComponent::PluginDatabaseComponent()
     rescanBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00)); // phosphor orange
     rescanBtn.onClick = [this] { refreshFromDisk(); };
 
+    addAndMakeVisible(exportCsvBtn);
+    exportCsvBtn.setButtonText("Export CSV");
+    exportCsvBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF44AA44));
+    exportCsvBtn.onClick = [this] { exportCSV(); };
+
+    addAndMakeVisible(importCsvBtn);
+    importCsvBtn.setButtonText("Import CSV");
+    importCsvBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFAA44FF));
+    importCsvBtn.onClick = [this] { importCSV(); };
+
     addAndMakeVisible(table);
     tableModel = std::make_unique<TableModel>(*this);
     table.setModel(tableModel.get());
@@ -86,6 +161,7 @@ PluginDatabaseComponent::PluginDatabaseComponent()
     table.getHeader().addColumn("Format", 4, 80);
     table.getHeader().addColumn("Vendor", 5, 180);
     table.getHeader().addColumn("Category", 6, 200);
+    table.getHeader().addColumn("Version", 7, 100);
 
     refreshFromDisk();
 }
@@ -103,6 +179,12 @@ void PluginDatabaseComponent::resized()
     sourceFilterCombo.setBounds(header.removeFromRight(150));
 
     bounds.removeFromTop(5);
+    auto csvRow = bounds.removeFromTop(30);
+    exportCsvBtn.setBounds(csvRow.removeFromLeft(120));
+    csvRow.removeFromLeft(10);
+    importCsvBtn.setBounds(csvRow.removeFromLeft(120));
+
+    bounds.removeFromTop(8);
     statusLabel.setBounds(bounds.removeFromTop(20));
 
     bounds.removeFromTop(10);
@@ -189,6 +271,9 @@ void PluginDatabaseComponent::showRowContextMenu(int rowNumber, juce::Point<int>
         menu.addItem(3, "View .nfo Text", entry.nfoFile.existsAsFile());
     }
 
+    menu.addSeparator();
+    menu.addItem(7, "Delete Entry AND Plugin File...");
+
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
         juce::Rectangle<int>(screenPosition, screenPosition)),
         [this, rowNumber](int result)
@@ -230,6 +315,10 @@ void PluginDatabaseComponent::showRowContextMenu(int rowNumber, juce::Point<int>
             else if (result == 6)
             {
                 showEntryEditor(entry);
+            }
+            else if (result == 7)
+            {
+                confirmDeleteEntryAndPlugin(rowNumber);
             }
             else if (result == 4)
             {
@@ -275,6 +364,165 @@ void PluginDatabaseComponent::showEntryEditor(const PluginDatabaseManager::Plugi
     new PluginEntryEditorWindow(databaseManager, entry, [this]
     {
         refreshFromDisk();
+    });
+}
+
+void PluginDatabaseComponent::cycleEntryType(int rowNumber)
+{
+    if (rowNumber < 0 || rowNumber >= (int)tableModel->rows.size())
+        return;
+
+    auto& entry = tableModel->rows[(size_t)rowNumber];
+    auto newType = (entry.type == PluginDatabaseManager::PluginType::Generator)
+        ? PluginDatabaseManager::PluginType::Effect
+        : PluginDatabaseManager::PluginType::Generator;
+
+    bool ok = (entry.source == PluginDatabaseManager::EntrySource::Installed)
+        ? databaseManager.ReclassifyInstalledEntry(entry, newType)
+        : databaseManager.ReclassifyEntry(entry, newType);
+
+    if (ok)
+    {
+        statusLabel.setText("Reclassified " + entry.name + " -> " +
+            (newType == PluginDatabaseManager::PluginType::Generator ? "Generator" : "Effect"),
+            juce::dontSendNotification);
+        refreshFromDisk();
+    }
+    else
+    {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+            "Reclassify Failed",
+            "Could not change the type for " + entry.name + ". A file with the same name "
+            "may already exist at the destination, or a file may be locked. "
+            "Rescanning to show current state.");
+        refreshFromDisk();
+    }
+}
+
+void PluginDatabaseComponent::confirmDeleteEntryAndPlugin(int rowNumber)
+{
+    if (rowNumber < 0 || rowNumber >= (int)tableModel->rows.size())
+        return;
+
+    auto entry = tableModel->rows[(size_t)rowNumber]; // copy -- rows may be re-sorted/cleared during the async dialog
+
+    juce::String pluginFilePath = (!entry.fileRecords.empty())
+        ? entry.fileRecords.front().filePathRaw : juce::String();
+
+    juce::String message = "This will move the following to the Recycle Bin:\n\n"
+        "Database entry: " + entry.fstFile.getFullPathName() + "\n";
+
+    if (pluginFilePath.isNotEmpty() && !pluginFilePath.contains("%"))
+        message += "Plugin file: " + pluginFilePath + "\n";
+    else
+        message += "(Plugin file path could not be resolved -- only the database entry will be removed)\n";
+
+    message += "\nThis is different from the normal Delete option -- it also removes the actual "
+        "plugin binary, which may live under Program Files. FL Studio will show this plugin as "
+        "missing until you rescan its plugin list.\n\n"
+        "Type DELETE below to confirm.";
+
+    auto* confirmWindow = new juce::AlertWindow(
+        "Delete Entry AND Plugin -- Final Confirmation",
+        message,
+        juce::MessageBoxIconType::WarningIcon);
+
+    confirmWindow->addTextEditor("confirmText", "", "Type DELETE here:");
+    confirmWindow->addButton("Confirm", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    confirmWindow->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    confirmWindow->enterModalState(true,
+        juce::ModalCallbackFunction::create(
+            [this, confirmWindow, entry](int result)
+            {
+                auto typed = confirmWindow->getTextEditorContents("confirmText");
+                if (result == 1 && typed.trim().equalsIgnoreCase("DELETE"))
+                {
+                    if (databaseManager.DeleteEntryAndPlugin(entry, recycleBin))
+                    {
+                        statusLabel.setText("Deleted entry and plugin: " + entry.name, juce::dontSendNotification);
+                    }
+                    else
+                    {
+                        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                            "Delete Failed", "Could not move all files to the recycle bin.");
+                    }
+                    refreshFromDisk();
+                }
+            }),
+        true);
+}
+
+void PluginDatabaseComponent::exportCSV()
+{
+    if (allRows.empty())
+    {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
+            "Export", "No entries to export -- scan the database first.");
+        return;
+    }
+
+    auto defaultFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        .getChildFile("plugin_database_export.csv");
+
+    csvChooser = std::make_unique<juce::FileChooser>("Save Plugin Database CSV", defaultFile, "*.csv");
+
+    int chooserFlags = juce::FileBrowserComponent::saveMode
+        | juce::FileBrowserComponent::canSelectFiles
+        | juce::FileBrowserComponent::warnAboutOverwriting;
+
+    csvChooser->launchAsync(chooserFlags, [this](const juce::FileChooser& chooser)
+    {
+        auto file = chooser.getResult();
+        if (file == juce::File())
+            return;
+
+        if (PluginDatabaseManager::ExportToCSV(allRows, file))
+        {
+            statusLabel.setText("Exported " + juce::String((int)allRows.size()) +
+                " entries to " + file.getFullPathName(), juce::dontSendNotification);
+        }
+        else
+        {
+            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                "Export Failed", "Could not write the CSV file. Check folder permissions.");
+        }
+    });
+}
+
+void PluginDatabaseComponent::importCSV()
+{
+    csvChooser = std::make_unique<juce::FileChooser>("Select Plugin Database CSV to Import",
+        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.csv");
+
+    int chooserFlags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    csvChooser->launchAsync(chooserFlags, [this](const juce::FileChooser& chooser)
+    {
+        auto file = chooser.getResult();
+        if (file == juce::File())
+            return;
+
+        juce::AlertWindow::showAsync(
+            juce::MessageBoxOptions()
+                .withIconType(juce::MessageBoxIconType::WarningIcon)
+                .withTitle("Confirm CSV Import")
+                .withMessage("This will REPLACE vendor, category, plugclass, and type attributes "
+                    "for every matching entry with the values in:\n\n" + file.getFullPathName() +
+                    "\n\nEach changed .Plugins.ini is backed up automatically before writing. "
+                    "Continue?")
+                .withButton("Import")
+                .withButton("Cancel"),
+            [this, file](int result)
+            {
+                if (result != 1)
+                    return;
+
+                auto summary = databaseManager.ImportFromCSV(file, allRows);
+                juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
+                    "Import Complete", summary);
+                refreshFromDisk();
+            });
     });
 }
 
@@ -519,7 +767,7 @@ PluginDatabaseWindow::PluginDatabaseWindow()
 {
     setUsingNativeTitleBar(true);
     setContentOwned(new PluginDatabaseComponent(), true);
-    centreWithSize(1050, 650);
+    centreWithSize(1050, 690);
     setResizable(true, true);
     setVisible(true);
 }
