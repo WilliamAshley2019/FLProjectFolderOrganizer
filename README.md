@@ -1,3 +1,19 @@
+VERSION 4: changes
+1. more safety mechanisms were added to reduce the risk of deleting files by accident, read only and system files now get filterd to a "protected folder" still need to test this, not sure how to yet. Likely need to make some read only files for testing purposes and maybe duplicated a system file or something. Still buggy. only really practical for cleaning.
+2. added the ability to edit some plugin entries, still limited. need to test if it effects what catagories the plugins show up in, it will likely be reset on fl studio rescan
+
+   TO ADD:
+   a. include that export as csv will keep all atrritubes and "replace attributes" from the .csv on csv import so that settings such as type can be reset.
+   b. the ability to have the "plugin version number"  displayed if possible so you know the specific build of the plugin if it is accessible via vst host infos.
+   c. the  option to right click "delete entry and plugin." so the plugin entry in the data base .nfo / .fst and associated vst file/folder is also deleted with right click interaction
+   d. clicking on the "type column in plugin manager lets you change from synth to effect to synth or unkown?
+   e. sorting by alpha betic when clicking on column header  so you can group plugins by the same vendor, or by plugin type or by catagory, or alphabetic plugin name
+   f. the ability to read and write data with unmp3 or its associated files.  to read and write sample data - incorporating not 100% sure yet UNMp3 with the plugin
+   g. audio is going into the plugin but not audio output, need to bypass audio processing, as it may stop audio playback if loaded on a live channel, this may be confusing to people not aware of why that is happening.
+   
+   
+-----------------------------------------------------------------
+VERSION 3
 WARNING. this is test only do not USE DELETE function it may be collating non .flp files still and if move function may move then to a different folder which for c:\ etc.. may move important files to a folder that will NOT be good... so do not use this currently to delete files if you are scanning adirectory with files that should not be deleted or moved, I still need to test how this is working wihtout testing it on my own system ... cause it might delete files I need so I will likely block off files if they are system files etc.. and stuffages. 
 
 
@@ -13,7 +29,9 @@ bug for synth / effect can be easily fixed.
 bug - files are being added to scan as "unknown" when not flp not good if someone adds an important directory, need to block 
 
 (note the project showing up as C is due to the size of the sqlite.c file which is massive compared to the rest of the code it is indeed a juce C++ project wtih only the one .c file for the sqlite stuff.
-Version 2 (second time typing this as second power outage this morning just struck while typing): what is new
+-----------------------------------------------------------------
+
+VERSION 2 (second time typing this as second power outage this morning just struck while typing): what is new
 
 1. right click interfaces to open in a specific version of FL or the project folder
 2. added fl1 and fl2 support / detection that wasn't added in the original verison
@@ -22,17 +40,14 @@ Version 2 (second time typing this as second power outage this morning just stru
 5. added recycling bin to insure no default file deletions, extra protection layer to accidental unrecoverable file deletions located in documents/WAM folder created context of WAM folder
 6.  hardrive space check to prevent operations that cannot complete due to space restrictions
 7.  moved database from appdata to /documents/WAM for easier access
-8.  
 
 To Add: 
 1. move flp to project folders rather than loose
 2. update v. number :) to 1.0.1
 3. add plugin database interaction
 4. add sample .wav/.mp3 interaction with tie in to UNMP3 functions such as sample analysis and metadata modification
-
-   
-
-
+-----------------------------------------------------------------
+VERSION 1
 This is an FL organization tool for managing FL Studio projects and related audio files. It originated from a JUCE-based prototype implemented as a VST3 effect that can also run standalone; the JUCE project includes file operations and hashing utilities and may be a useful base for adding database and file-management features.
 
 
