@@ -2,6 +2,7 @@ VERSION 5: changes - this version is a little unstable with plugin database laun
 1. the addition of plugin management was started in the plugin manager allowing the removal of plugins from the database - this is not yet clean
 2. version number of the plugins are provided if available via the PE call, this should be a helpful tool to know the version number of the plugin you are using
 3. corrected the sort order for each column in plugin manager now sorts alphabetically and including type/groups
+4. implemented "delete' type in for confirmation of destructive processes with plugin database to insure incorrect selections are not removed in error. 
    
 To add
    f. the ability to read and write data with unmp3 or its associated files.  to read and write sample data - incorporating not 100% sure yet UNMp3 with the plugin, this will likely be working with the .remeta file.
