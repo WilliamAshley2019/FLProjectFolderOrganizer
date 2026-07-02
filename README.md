@@ -8,10 +8,10 @@ VERSION 4: changes
    c. the  option to right click "delete entry and plugin." so the plugin entry in the data base .nfo / .fst and associated vst file/folder is also deleted with right click interaction
    d. clicking on the "type column in plugin manager lets you change from synth to effect to synth or unkown?
    e. sorting by alpha betic when clicking on column header  so you can group plugins by the same vendor, or by plugin type or by catagory, or alphabetic plugin name
-   f. the ability to read and write data with unmp3 or its associated files.  to read and write sample data - incorporating not 100% sure yet UNMp3 with the plugin 
+   f. the ability to read and write data with unmp3 or its associated files.  to read and write sample data - incorporating not 100% sure yet UNMp3 with the plugin
+   g. audio is going into the plugin but not audio output, need to bypass audio processing, as it may stop audio playback if loaded on a live channel, this may be confusing to people not aware of why that is happening.
    
    
-4. 
 -----------------------------------------------------------------
 VERSION 3
 WARNING. this is test only do not USE DELETE function it may be collating non .flp files still and if move function may move then to a different folder which for c:\ etc.. may move important files to a folder that will NOT be good... so do not use this currently to delete files if you are scanning adirectory with files that should not be deleted or moved, I still need to test how this is working wihtout testing it on my own system ... cause it might delete files I need so I will likely block off files if they are system files etc.. and stuffages. 
