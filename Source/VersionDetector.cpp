@@ -115,6 +115,7 @@ juce::String VersionDetector::GetVersionGroup(const juce::String& versionString)
     };
 
     std::vector<VersionMapping> mappings = {
+        { "26.", "2026", 26 },
         { "25.", "2025", 25 },
         { "24.", "2024", 24 },
         { "23.", "2023", 23 },
@@ -153,6 +154,7 @@ int VersionDetector::GetMajorVersion(const juce::String& versionString)
     };
 
     std::vector<VersionMapping> mappings = {
+        { "26.", 26 },
         { "25.", 25 },
         { "24.", 24 },
         { "23.", 23 },
