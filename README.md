@@ -1,4 +1,4 @@
-2026-07-07 working on flp file tool that is being built as a standalone tool but intended to merge with this project as a a new flptool optimistic it will provide a lot more access to info and stuff in flp files
+2026-07-07 working on flp file tool that is being built as a standalone tool but intended to merge with this project as a a new flptool optimistic it will provide a lot more access to info and stuff in flp files.  Currently just building out the source for this sort of what the first attempt to get the code up and what it will handle is up but it still has bugs it is getting closer to compiling thoug. however due to the various versions of flp I really have no idea if the code I drew from was correct or not. NOTE I will likely get some licenses up for the code once I get it compiled there probably are people who should get mention I just havn't finalized the code yet so I am not sure who 100% will be licensed as the source as there were some overlapping data points and it was all adapted and translated from other language to C++.
 
 Must remember to move plugin database to something like  juce::ThreadPool loaderThread { 1 }; // 1 background thread
 
