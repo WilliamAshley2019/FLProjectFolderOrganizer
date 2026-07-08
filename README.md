@@ -1,3 +1,16 @@
+2026-07-07 working on flp file tool that is being built as a standalone tool but intended to merge with this project as a a new flptool optimistic it will provide a lot more access to info and stuff in flp files
+
+Must remember to move plugin database to something like  juce::ThreadPool loaderThread { 1 }; // 1 background thread
+
+To add  
+├── flp.h                 (Core parser header + added patches)
+├── flp.cpp               (Core parser implementation + added patches)
+├── flphelper.h           (All 9 utility modules combined)  - plugin scanner, sample scanner, arranger, comparer, cleaner, batch processor, midi bridge, automation editor and statistics generator
+├── flphelper.cpp         (All 9 utility modules combined)
+
+
+
+
 VERSION 5: changes - this version is a little unstable with plugin database launch - this is known and being fixed hopefully for the next update, plugin database will load but takes longer with more plugins. If you click cancel rather than end task it should load, and it loads in a seperate popup window.  
 1. the addition of plugin management was started in the plugin manager allowing the removal of plugins from the database - this is not yet clean
 2. version number of the plugins are provided if available via the PE call, this should be a helpful tool to know the version number of the plugin you are using
