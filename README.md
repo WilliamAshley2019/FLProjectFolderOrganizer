@@ -1,3 +1,31 @@
+2026-07-07 working on flp file tool that is being built as a standalone tool but intended to merge with this project as a a new flptool optimistic it will provide a lot more access to info and stuff in flp files
+
+Must remember to move plugin database to something like  juce::ThreadPool loaderThread { 1 }; // 1 background thread
+
+To add  
+├── flp.h                 (Core parser header + added patches)
+├── flp.cpp               (Core parser implementation + added patches)
+├── flphelper.h           (All 9 utility modules combined)  - plugin scanner, sample scanner, arranger, comparer, cleaner, batch processor, midi bridge, automation editor and statistics generator
+├── flphelper.cpp         (All 9 utility modules combined)
+
+
+
+
+VERSION 5: changes - this version is a little unstable with plugin database launch - this is known and being fixed hopefully for the next update, plugin database will load but takes longer with more plugins. If you click cancel rather than end task it should load, and it loads in a seperate popup window.  
+1. the addition of plugin management was started in the plugin manager allowing the removal of plugins from the database - this is not yet clean
+2. version number of the plugins are provided if available via the PE call, this should be a helpful tool to know the version number of the plugin you are using
+3. corrected the sort order for each column in plugin manager now sorts alphabetically and including type/groups
+4. implemented "delete' type in for confirmation of destructive processes with plugin database to insure incorrect selections are not removed in error. 
+   
+To add
+   f. the ability to read and write data with unmp3 or its associated files.  to read and write sample data - incorporating not 100% sure yet UNMp3 with the plugin, this will likely be working with the .remeta file.
+    g. audio is going into the plugin but not audio output, need to bypass audio processing, as it may stop audio playback if loaded on a live channel, this may be confusing to people not aware of why that is happening.
+   h. plugin processes need to be moved off the process thread. current database launch on large databaes takes far too long to populate resulting in a hang that will resolve with time however it can hange fl studio making it unstable
+   i. other things are also to be moved off the message thread.
+   j. as part of this backing up database states as part of the load process will reduce the amount of data needing to be repopulated from process calls, the ability to rescan or update will be through a new button.
+   
+
+
 VERSION 4: changes
 1. more safety mechanisms were added to reduce the risk of deleting files by accident, read only and system files now get filterd to a "protected folder" still need to test this, not sure how to yet. Likely need to make some read only files for testing purposes and maybe duplicated a system file or something. Still buggy. only really practical for cleaning.
 2. added the ability to edit some plugin entries, still limited. need to test if it effects what catagories the plugins show up in, it will likely be reset on fl studio rescan
@@ -8,9 +36,7 @@ VERSION 4: changes
    c. the  option to right click "delete entry and plugin." so the plugin entry in the data base .nfo / .fst and associated vst file/folder is also deleted with right click interaction
    d. clicking on the "type column in plugin manager lets you change from synth to effect to synth or unkown?
    e. sorting by alpha betic when clicking on column header  so you can group plugins by the same vendor, or by plugin type or by catagory, or alphabetic plugin name
-   f. the ability to read and write data with unmp3 or its associated files.  to read and write sample data - incorporating not 100% sure yet UNMp3 with the plugin
-   g. audio is going into the plugin but not audio output, need to bypass audio processing, as it may stop audio playback if loaded on a live channel, this may be confusing to people not aware of why that is happening.
-   
+
    
 -----------------------------------------------------------------
 VERSION 3
