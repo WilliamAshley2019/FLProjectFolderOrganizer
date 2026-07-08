@@ -1,3 +1,5 @@
+Edit file is TOTALLY not parsing properly as of yet so super buggy, I do think it is trying to pull data but I am thinking it is not doing a good job of it at this point.
+
 To DO the challenges at this point are 1. insuring it can open all FLPs to gather the needed data 2. add a "flp scan" to the sample scan section. Enable the ability to copy samples from flp to selected folder or create project folder and copy flp and samples to new project folder.  3. Add a vst scan section for the plugin manager to do a "manage plugins per project.  4. batch processes are more complex to run project bones for instance via batch process. I am sure there are other useful functions. Actual FLP operations remain "occulted" as I don't fully understand the hash functions I am guessing may be involved to prevent FLP corrupt so reading is one thing, writting to or editing flp files is another matter. The real issue is to insure that specific secuity functions are not tampered with, nor the ability to tamper with them included in this project.
 
 
