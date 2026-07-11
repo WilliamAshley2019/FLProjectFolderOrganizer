@@ -1,10 +1,12 @@
 2026-07-10 FLP TOOLKIT is now getting the test data mostly for early versions of frutiyloops, tested on a couple old files. I think maybe the search and numbers now lines up  based on a couple old file tests still some quirks however the basic milestone is function more testing is ndeed to see just whe the flp format is no longer able to be read by this parsing tool.
 
-to do, tie in FLProjectFolderOrganizer  version source check into switching modes for parsing logics baed on flp format parsing logic changes. I suspect this will get far more difficult to get right with each new version due to increasing binary and funcitions within fl studio, I likely will not be able to test all these myself due to the time of testing all fl studio flp
+to do, tie in FLProjectFolderOrganizer  version source check into switching modes for parsing logics based on flp format parsing logic changes. I suspect this will get far more difficult to get right with each new version due to increasing binary and funcitions within fl studio, I likely will not be able to test all these myself due to the time of testing all fl studio flp
 project calls and functions - as it is likely hundreds of functions to account for, as the project is already thousands of lines of code I suspect an effective tool to analyze flp 
 project data may be a little beyond my ability to manage to the level I would like but I will still try to progress this project and the FLProjectFolder Organizer tools. This project might start to make more sense as a standalone app as it grows in size though.Time will tell. Yet success on the flp toolkit I can read basic info like missing samples. 
 
 To do tie in the missing samples data to direct sample search and cross referencing of the scanned sample database to locate the missing samples.  This may expand the search path to the total scanned database not simply the fl studio search folders. Also it is possible to do an add in to tie in a broader search such as internet search etc.. in the future automating search functions to external tools/apps to locate the missing samples.
+
+issues: ts404 detects as 3rd party tool, not sure why. channel rack tracks and playlist patterns do not quite detect possibly still some buggy stuff with track detection not sure why yet.
 
 
 2026-07-08 On load file is TOTALLY not parsing properly as of yet so super buggy, I do think it is trying to pull data but I am thinking it is not doing a good job of it at this point. 100% will need some attention to sort out what data it is actually pulling. Debug may need apply.
