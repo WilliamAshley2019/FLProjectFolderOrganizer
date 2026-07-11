@@ -49,7 +49,10 @@ namespace FL
     //     manual bit-reinterpretation for floats/doubles. JUCE's own
     //     InputStream::read()/OutputStream::write() are plain byte copies,
     //     so decoding "as little-endian" after a raw read is correct on every
-    //     platform (identity on LE hosts, byte-swapped on BE hosts).
+    //     platform (identity on LE hosts, byte-swapped on BE hosts). I feel like
+    //     I am making an error with this as I think this was used for parsing 
+    //     the flp file format itself. This may be the reason the data is not returning
+    //     properly. Ful reassessment of how data is being parsed and mapped is needed.
     // =============================================================================
     static uint16_t leU16FromBytes(const void* bytes)
     {
