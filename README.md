@@ -1,3 +1,5 @@
+WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working.
+
 2026-07-10 FLP TOOLKIT is now getting the test data mostly for early versions of frutiyloops, tested on a couple old files. I think maybe the search and numbers now lines up  based on a couple old file tests still some quirks however the basic milestone is functioning more testing is needed to see exactly the cuttoff point of the parsing logic for the flp format.
 
 to do, tie in FLProjectFolderOrganizer  version source check into switching modes for parsing logics based on flp format parsing logic changes. I suspect this will get far more difficult to get right with each new version due to increasing binary and funcitions within fl studio, I likely will not be able to test all these myself due to the time of testing all fl studio flp
