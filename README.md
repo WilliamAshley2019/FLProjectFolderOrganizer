@@ -1,5 +1,7 @@
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working.
 
+CURRENTLY THIS PROJECT IS SEPERATED INTO TWO WORKING PROJECTS FLProjectOrganizer and FLPTOOL (flp toolkit)   these projects intend to be interlinked with flptoolkit allowing deeper functions from analysis and possible batch translation of data such as midi extraction or ways of working with flp as data structures rather than a whole file. I don't actually know the flp format I have not done any reverse engineering I am just applying the logic of the other projects on github like Katai and PyFLP to try to translate and connect their work into a C++ / Juce 8 form.
+
 2026-07-10 FLP TOOLKIT is now getting the test data mostly for early versions of frutiyloops, tested on a couple old files. I think maybe the search and numbers now lines up  based on a couple old file tests still some quirks however the basic milestone is functioning more testing is needed to see exactly the cuttoff point of the parsing logic for the flp format.
 
 to do, tie in FLProjectFolderOrganizer  version source check into switching modes for parsing logics based on flp format parsing logic changes. I suspect this will get far more difficult to get right with each new version due to increasing binary and funcitions within fl studio, I likely will not be able to test all these myself due to the time of testing all fl studio flp
