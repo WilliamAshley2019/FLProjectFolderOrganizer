@@ -7,7 +7,7 @@ project data may be a little beyond my ability to manage to the level I would li
 To do tie in the missing samples data to direct sample search and cross referencing of the scanned sample database to locate the missing samples.  This may expand the search path to the total scanned database not simply the fl studio search folders. Also it is possible to do an add in to tie in a broader search such as internet search etc.. in the future automating search functions to external tools/apps to locate the missing samples.
 
 issues: ts404 detects as 3rd party tool, not sure why. channel rack tracks and playlist patterns do not quite detect possibly still some buggy stuff with track detection not sure why yet.
-
+Not sure the fruityloops version cutoff for analysis however newer flps read as corrupt likely due to binary format not allowing access to data entry points that are able to be parsed? 32 vs 64 bit data structures perhaps?
 
 2026-07-08 On load file is TOTALLY not parsing properly as of yet so super buggy, I do think it is trying to pull data but I am thinking it is not doing a good job of it at this point. 100% will need some attention to sort out what data it is actually pulling. Debug may need apply.
 
