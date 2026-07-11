@@ -1,4 +1,13 @@
-On load file is TOTALLY not parsing properly as of yet so super buggy, I do think it is trying to pull data but I am thinking it is not doing a good job of it at this point. 100% will need some attention to sort out what data it is actually pulling. Debug may need apply.
+2026-07-10 FLP TOOLKIT is now getting the test data mostly for early versions of frutiyloops, tested on a couple old files. I think maybe the search and numbers now lines up  based on a couple old file tests still some quirks however the basic milestone is function more testing is ndeed to see just whe the flp format is no longer able to be read by this parsing tool.
+
+to do, tie in FLProjectFolderOrganizer  version source check into switching modes for parsing logics baed on flp format parsing logic changes. I suspect this will get far more difficult to get right with each new version due to increasing binary and funcitions within fl studio, I likely will not be able to test all these myself due to the time of testing all fl studio flp
+project calls and functions - as it is likely hundreds of functions to account for, as the project is already thousands of lines of code I suspect an effective tool to analyze flp 
+project data may be a little beyond my ability to manage to the level I would like but I will still try to progress this project and the FLProjectFolder Organizer tools. This project might start to make more sense as a standalone app as it grows in size though.Time will tell. Yet success on the flp toolkit I can read basic info like missing samples. 
+
+To do tie in the missing samples data to direct sample search and cross referencing of the scanned sample database to locate the missing samples. 
+
+
+2026-07-08 On load file is TOTALLY not parsing properly as of yet so super buggy, I do think it is trying to pull data but I am thinking it is not doing a good job of it at this point. 100% will need some attention to sort out what data it is actually pulling. Debug may need apply.
 
 To DO the challenges at this point are 1. insuring it can open all FLPs to gather the needed data 2. add a "flp scan" to the sample scan section. Enable the ability to copy samples from flp to selected folder or create project folder and copy flp and samples to new project folder.  3. Add a vst scan section for the plugin manager to do a "manage plugins per project.  4. batch processes are more complex to run project bones for instance via batch process. I am sure there are other useful functions. Actual FLP operations remain "occulted" as I don't fully understand the hash functions I am guessing may be involved to prevent FLP corrupt so reading is one thing, writting to or editing flp files is another matter. The real issue is to insure that specific secuity functions are not tampered with, nor the ability to tamper with them included in this project.
 
