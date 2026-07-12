@@ -16,22 +16,19 @@ private:
 
     // UI Components
     juce::TextButton loadButton { "Load FLP Project..." };
-    juce::TextButton exportMidiButton { "Export Patterns to MIDI..." };
     juce::Label titleLabel;
     juce::ComboBox toolSelector;
     juce::TextEditor outputDisplay;
     juce::Label statusLabel;
 
-    // Must be kept alive for the duration of the async dialog - see loadButtonClicked()/exportMidiButtonClicked()
+    // Must be kept alive for the duration of the async dialog - see loadButtonClicked()
     std::unique_ptr<juce::FileChooser> fileChooser;
-    std::unique_ptr<juce::FileChooser> midiSaveChooser;
 
     // Enum for tool selection
     enum ToolID { Stats = 0, Plugins, Samples, Arrangement };
 
     // Callbacks
     void loadButtonClicked();
-    void exportMidiButtonClicked();
     void toolSelectorChanged();
     void refreshOutputDisplay();
 

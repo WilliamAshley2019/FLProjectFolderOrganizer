@@ -5,86 +5,6 @@
 namespace FL
 {
     // =========================================================================
-    // 0. Plugin database lookup
-    // =========================================================================
-    juce::File PluginDBLookup::getDefaultDatabaseRoot()
-    {
-        return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-            .getChildFile("Image-Line")
-            .getChildFile("FL Studio")
-            .getChildFile("Presets")
-            .getChildFile("Plugin database");
-    }
-
-    PluginDBLookup::PluginDBLookup(const juce::File& databaseRoot)
-    {
-        juce::File root = databaseRoot.exists() ? databaseRoot : getDefaultDatabaseRoot();
-        if (!root.isDirectory())
-            return; // not installed on this machine, or database not yet generated - fine, just empty
-
-        juce::File installedRoot = root.getChildFile("Installed");
-        juce::Array<juce::File> iniFiles;
-        // FL Studio versions differ on whether this is a single consolidated
-        // .Plugins.ini or split per Effects/Generators - handle both by
-        // searching for every .Plugins.ini under Installed\.
-        installedRoot.findChildFiles(iniFiles, juce::File::findFiles, true, "*.Plugins.ini");
-        for (auto& f : iniFiles)
-            parseIniFile(f);
-    }
-
-    void PluginDBLookup::parseIniFile(const juce::File& iniFile)
-    {
-        juce::StringArray lines;
-        iniFile.readLines(lines);
-
-        juce::String currentSection;
-        juce::String currentName, currentVendor, currentCategory;
-        bool haveEntry = false;
-
-        auto flush = [&]() {
-            if (haveEntry && currentName.isNotEmpty()) {
-                Entry e;
-                e.vendorName = currentVendor;
-                e.category = currentCategory;
-                if (currentSection.containsIgnoreCase("\\VST3\\")) e.formatType = "VST3";
-                else if (currentSection.containsIgnoreCase("\\VST\\")) e.formatType = "VST";
-                else if (currentSection.containsIgnoreCase("\\CLAP\\")) e.formatType = "CLAP";
-                entries[currentName.toLowerCase()] = e;
-            }
-            currentName.clear(); currentVendor.clear(); currentCategory.clear();
-            haveEntry = false;
-        };
-
-        for (const auto& rawLine : lines) {
-            juce::String line = rawLine.trim();
-            if (line.isEmpty()) continue;
-
-            if (line.startsWith("[") && line.endsWith("]")) {
-                flush();
-                currentSection = line.substring(1, line.length() - 1);
-                continue;
-            }
-            auto eq = line.indexOfChar('=');
-            if (eq <= 0) continue;
-            juce::String key = line.substring(0, eq).trim();
-            juce::String value = line.substring(eq + 1).trim();
-
-            if (key == "ps_name") { currentName = value; haveEntry = true; }
-            else if (key == "ps_file_vendorname_0") currentVendor = value;
-            else if (key == "ps_file_category_0") currentCategory = value;
-        }
-        flush(); // last section in the file
-    }
-
-    std::optional<PluginDBLookup::Entry> PluginDBLookup::lookup(const juce::String& pluginName) const
-    {
-        if (pluginName.isEmpty()) return std::nullopt;
-        auto it = entries.find(pluginName.toLowerCase());
-        if (it == entries.end()) return std::nullopt;
-        return it->second;
-    }
-
-    // =========================================================================
     // 1. Plugin Inspector
     // =========================================================================
     std::vector<PluginInfo> PluginInspector::getPluginSummary() const {
@@ -98,43 +18,7 @@ namespace FL
 
             juce::String displayName = ch->getName();
             juce::String internalName = ch->getInternalName();
-
-            // A handful of very old Image-Line generators (pre-dating the
-            // "Fruity X" wrapper naming convention entirely) store their own
-            // name directly as the PluginFactory string, with nothing that
-            // distinguishes them from a real 3rd-party plugin's factory name.
-            // Each entry below was confirmed against an actual project file
-            // during testing, not guessed - add to this list as more old
-            // files get checked rather than assuming the pattern generalizes.
-            static const std::unordered_set<juce::String> kKnownLegacyNativeFactoryNames = {
-                "Plucked!", // confirmed via a FruityLoops-era project (physical-modeling plucked string generator)
-            };
-
-            // Three real cases here, not two:
-            //  1. internalName starts with "Fruity" - an Image-Line generator
-            //     wrapped the same way a VST would be (e.g. "Fruity Granulizer").
-            //  2. internalName is something else entirely - a real 3rd-party
-            //     VST/VST3, since only actual plugins get a PluginFactory name
-            //     that doesn't match Image-Line's own wrapper convention.
-            //  3. internalName is EMPTY - there's no PluginFactory/NewPlugin
-            //     event on this channel at all. That's not "unknown", it's the
-            //     old pre-wrapper era: TS404, DrumSynth, and similar generators
-            //     were hardcoded straight into the FL engine with no plugin
-            //     wrapper whatsoever, long before Image-Line's own plugins
-            //     started being hosted the same way 3rd-party VSTs are. An
-            //     empty internalName is actually the *strongest* native signal
-            //     there is, not a reason to fall through to "Third-Party".
-            bool hasWrapper = internalName.isNotEmpty();
-            bool isNative = !hasWrapper
-                          || internalName.startsWith("Fruity")
-                          || internalName.startsWith("FL")
-                          || kKnownLegacyNativeFactoryNames.count(internalName) > 0;
-
-            juce::String vendor = isNative ? "Image-Line" : "Third-Party";
-            if (!hasWrapper) vendor = "Image-Line (built-in engine synth)";
-            else if (kKnownLegacyNativeFactoryNames.count(internalName) > 0) vendor = "Image-Line (legacy native generator)";
-            else if (auto found = pluginDB.lookup(internalName))
-                vendor = found->vendorName.isNotEmpty() ? found->vendorName : vendor;
+            bool isNative = internalName.startsWith("Fruity") || internalName.startsWith("FL");
             
             bool isDemo = false;
             const EventTree& tree = ch->getEventTree();
@@ -147,7 +31,7 @@ namespace FL
             if (it == map.end()) {
                 PluginInfo info;
                 info.name = displayName.isNotEmpty() ? displayName : internalName;
-                info.vendor = vendor;
+                info.vendor = isNative ? "Image-Line" : "Third-Party";
                 info.type = type; info.instanceCount = 1; info.isDemo = isDemo; info.isNative = isNative;
                 map[key] = info;
             } else {

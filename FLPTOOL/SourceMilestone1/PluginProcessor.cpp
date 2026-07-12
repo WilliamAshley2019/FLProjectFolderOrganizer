@@ -130,23 +130,6 @@ juce::String PluginProcessor::getArrangementReport() const
     return dumper.generateTextReport();
 }
 
-juce::String PluginProcessor::exportPatternsToMidi(const juce::File& outputMidiFile)
-{
-    juce::ScopedLock lock(projectLock);
-    if (!project) return "No project loaded.";
-
-    bool ok = FL::MidiBridge::exportProjectToMidi(*project, outputMidiFile);
-    if (!ok)
-        return "Failed to write MIDI file - check that the destination folder is writable.";
-
-    auto patterns = project->getPatterns();
-    int totalNotes = 0;
-    for (auto& p : patterns) totalNotes += (int) p.getNotes().size();
-
-    return "Exported " + juce::String(patterns.size()) + " pattern(s), "
-         + juce::String(totalNotes) + " note(s) total, to:\n" + outputMidiFile.getFullPathName();
-}
-
 // =============================================================================
 // Required JUCE plugin entry point.
 // Every VST3/Standalone/etc. wrapper JUCE builds calls this exact function to

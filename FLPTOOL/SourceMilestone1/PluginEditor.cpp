@@ -19,10 +19,6 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     loadButton.onClick = [this] { loadButtonClicked(); };
     addAndMakeVisible(loadButton);
 
-    // Export-to-MIDI Button
-    exportMidiButton.onClick = [this] { exportMidiButtonClicked(); };
-    addAndMakeVisible(exportMidiButton);
-
     // Tool Selector
     toolSelector.addItem("Project Statistics", ToolID::Stats + 1);
     toolSelector.addItem("Plugin Usage", ToolID::Plugins + 1);
@@ -71,10 +67,8 @@ void PluginEditor::resized()
     
     bounds.removeFromTop(10); // Spacer
 
-    // Tool selector + export button share a row
+    // Tool selector
     auto toolBar = bounds.removeFromTop(30);
-    exportMidiButton.setBounds(toolBar.removeFromRight(190));
-    toolBar.removeFromRight(10); // Spacer
     toolSelector.setBounds(toolBar);
 
     bounds.removeFromTop(10); // Spacer
@@ -124,37 +118,6 @@ void PluginEditor::loadButtonClicked()
             statusLabel.setText("Status: Failed to load file. Check console.", juce::dontSendNotification);
             outputDisplay.setText("Error: Could not parse the FLP file. It may be corrupted or an unsupported version.");
         }
-    });
-}
-
-void PluginEditor::exportMidiButtonClicked()
-{
-    if (!processorRef.isProjectLoaded())
-    {
-        statusLabel.setText("Status: Load a project first.", juce::dontSendNotification);
-        return;
-    }
-
-    midiSaveChooser = std::make_unique<juce::FileChooser>(
-        "Export patterns to MIDI file...",
-        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("patterns.mid"),
-        "*.mid");
-
-    constexpr auto flags = juce::FileBrowserComponent::saveMode
-                          | juce::FileBrowserComponent::warnAboutOverwriting;
-
-    midiSaveChooser->launchAsync(flags, [this](const juce::FileChooser& chooser)
-    {
-        auto file = chooser.getResult();
-        if (file == juce::File{})
-        {
-            statusLabel.setText("Status: Export cancelled.", juce::dontSendNotification);
-            return;
-        }
-
-        auto result = processorRef.exportPatternsToMidi(file);
-        statusLabel.setText("Status: " + result.upToFirstOccurrenceOf("\n", false, false), juce::dontSendNotification);
-        outputDisplay.setText(result);
     });
 }
 

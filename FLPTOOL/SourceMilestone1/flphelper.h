@@ -10,52 +10,9 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
-#include <optional>
 
 namespace FL
 {
-    // =========================================================================
-    // 0. Plugin database lookup (read-only, best-effort)
-    // =========================================================================
-    // Parses FL Studio's Installed\.Plugins.ini (same file the separate FL
-    // Project Organizer's PluginDatabaseManager reads) to get an authoritative
-    // vendor/category/format for a plugin name, rather than guessing from
-    // naming conventions alone. Deliberately minimal and read-only: this does
-    // NOT pull in PluginDatabaseManager itself, since that class depends on
-    // RecycleBinManager/SafeFileOperations/sqlite3 which live in the FL
-    // Project Organizer project, not here. If those get shared into a common
-    // library later, this can be replaced by a thin wrapper around the real
-    // thing - for now it's a self-contained lookup covering just what
-    // PluginInspector needs.
-    //
-    // Gracefully finds nothing (never throws, never blocks) if FL Studio
-    // isn't installed on this machine or hasn't generated the database yet -
-    // callers must treat a missing entry as "unknown", not as an error.
-    class PluginDBLookup {
-    public:
-        struct Entry {
-            juce::String vendorName;
-            juce::String category;
-            juce::String formatType; // "VST", "VST3", "CLAP", or "" if not derivable
-        };
-
-        // Scans the default database location once at construction. Pass an
-        // explicit root to point at a non-default install (e.g. for testing).
-        explicit PluginDBLookup(const juce::File& databaseRoot = {});
-
-        // Case-insensitive lookup by plugin display name (matched against
-        // .Plugins.ini's ps_name field). Returns nullopt if the database
-        // wasn't found or the name has no entry.
-        std::optional<Entry> lookup(const juce::String& pluginName) const;
-
-        bool isDatabaseAvailable() const { return !entries.empty(); }
-
-    private:
-        std::unordered_map<juce::String, Entry> entries; // key: name.toLowerCase()
-        static juce::File getDefaultDatabaseRoot();
-        void parseIniFile(const juce::File& iniFile);
-    };
-
     // =========================================================================
     // 1. Plugin Usage Analyzer
     // =========================================================================
@@ -72,7 +29,6 @@ namespace FL
         std::vector<PluginInfo> getPluginSummary() const;
     private:
         const Project& project;
-        PluginDBLookup pluginDB; // best-effort; degrades to naming-convention heuristics if unavailable
     };
 
     // =========================================================================

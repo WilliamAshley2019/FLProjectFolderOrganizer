@@ -45,12 +45,6 @@ public:
     juce::String getSampleReport() const;
     juce::String getArrangementReport() const;
 
-    // Exports every pattern in the loaded project to a single .mid file
-    // (one MIDI track per pattern, tempo on the first track). Returns a
-    // human-readable result message for display, since this is invoked
-    // directly from a UI button rather than returning a report string.
-    juce::String exportPatternsToMidi(const juce::File& outputMidiFile);
-
 private:
     // The core FLP project instance
     std::unique_ptr<FL::Project> project;
