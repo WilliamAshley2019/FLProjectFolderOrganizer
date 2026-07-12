@@ -1,3 +1,5 @@
+This project is independent and is not affiliated with Image-Line / FL Studio. This projectt aims to provide a tool to help manage external elements such as samples, plugins and .flp files for project management for organization and analysis, extraction, logging and tracking or other workflows not currently user accessible or expedient within FL Studio AFAIK. If you have issues with this project contact me directly at contact@williamashley.music do not contact ImageLine if you experience issues with this project it is not affiliate with them. 
+
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
 
