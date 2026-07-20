@@ -107,16 +107,13 @@ namespace FL
             // a real project: ChannelType::Instrument covers both true
             // multi-out instrument channels AND audio clips, distinguished
             // only by whether a sample path is actually set. These aren't
-            // plugin instances at all, so they don't belong in this report.
+            // plugin instances at all.
             if (internalName.isEmpty() && ch->getSamplePath().isNotEmpty()) { continue; }
 
             // Image-Line generators with their own factory name - neither the
             // "Fruity X" wrapper convention nor "Fruity Wrapper" (used for
             // externally-hosted VST/VST3/CLAP plugins) - so nothing in the
-            // name itself marks them as native. Each entry below was
-            // confirmed against a real project file, not guessed; add to
-            // this list as more get checked rather than assuming it
-            // generalizes to every Image-Line plugin.
+            // name itself marks them as native. 
             static const std::unordered_set<juce::String> kKnownNativeFactoryNames = {
                 "Plucked!", // FruityLoops-era physical-modeling plucked string generator
                 "FLEX",     // modern Image-Line rompler/sampler
@@ -220,7 +217,7 @@ namespace FL
     // =========================================================================
     namespace {
         // Builds the composite display name FL Studio's own UI shows for an
-        // automation clip ("Digilog - Filter cutoff") by combining the
+        // automation clip for example ("Digilog - Filter cutoff") by combining the
         // automation channel's own name with its link target's name. The
         // link itself (RemoteController: trackId = automation channel's own
         // IID, destId = target channel IID) sits outside every channel's own
