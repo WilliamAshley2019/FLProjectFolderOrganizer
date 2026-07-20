@@ -279,8 +279,7 @@ namespace FL
         else if (idVal < 128) dataSize = 2;
         else if (idVal < 192) {
             // EventID 172 is a confirmed exception to the standard 4-byte
-            // dword-range rule - see the reverse-engineering notes in
-            // README.md under "FL Studio 26". Reproduced identically across
+            // dword-range rule -   Reproduced identically across
             // two independent real FL 26 files; not yet cross-checked
             // against any external documentation.
             dataSize = (idVal == 172) ? 3 : 4;
@@ -1795,7 +1794,7 @@ namespace FL
     bool Mixer::getAPDC() const
     {
         // The exact event carrying "automatic plugin delay compensation" has
-        // not been reverse-engineered with confidence, so we avoid guessing
+        // not been identified so we avoid guessing
         // at (and potentially colliding with) an existing EventID.
         return false;
     }
