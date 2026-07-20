@@ -9,7 +9,7 @@ Plugin -> preset/title. The audio clips were a little weird likely cause they we
 rack and playlist.  A bunch of other things will update in more detail likely. https://github.com/WilliamAshley2019/FLProjectFolderOrganizer/tree/main/FLPTOOL
 I have a sense there is so much stuff that could be going on in a flp that it will not be a quick victory to get everything detecting and working properly however some basic key functions seem to be working now. 
 
-TO do: figure out how automation clip points work.
+TO do: figure out how automation clip points work so automation data can be properly extracted.
 
 2026-07-12 started to resolve the plugin detection code to attempt to read fl native plugins correct etc. Part of that bug was that internal engine plugins such as TS404 and drumsynth may have not been in the same type of wrapper so they were detecting as unknown. FL format has been considered as a way of detecting fruity plugins rather than using more indirect methods such as using plugin names themselves, this can cross index plugin database information to get a correct idea of what plugins are.   More needs to be done but should hopefully be in place by the next major update to the source. Started to work on midi extraction.  Also started trying to merge the FLProjectOrganizer and FLPTOOLKIT into a common codebase that can use the code from the other in hopes of making FLPtoolkit an extension of FLProjectOrganizer.  Big success in this one is getting the UI to work and successfully export detected midi patterns as .mid. Not entirely sure how working it is yet though.
 
