@@ -1,3 +1,6 @@
+
+
+
 This project is independent and is not affiliated with Image-Line / FL Studio. This project aims to provide a tool to help manage external elements such as samples, plugins and .flp files for project management for organization and analysis, extraction, logging and tracking or other workflows not currently user accessible or expedient within FL Studio AFAIK. If you have issues with this project contact me directly at contact@williamashley.music do not contact ImageLine if you experience issues with this project it is not affiliate with them. 
 
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
@@ -9,7 +12,7 @@ Plugin -> preset/title. The audio clips were a little weird likely cause they we
 rack and playlist.  A bunch of other things will update in more detail likely. https://github.com/WilliamAshley2019/FLProjectFolderOrganizer/tree/main/FLPTOOL
 I have a sense there is so much stuff that could be going on in a flp that it will not be a quick victory to get everything detecting and working properly however some basic key functions seem to be working now. 
 
-TO do: figure out how automation clip points work so automation data can be properly extracted.
+TO do: figure out how automation clip points work so automation data can be properly extracted. Automation events and automation clips have evolved so wrapping my head around how the data is housed in the flp will need a little attention. Adding links to more useful tools https://github.com/monadgroup/FLParser
 
 2026-07-12 started to resolve the plugin detection code to attempt to read fl native plugins correct etc. Part of that bug was that internal engine plugins such as TS404 and drumsynth may have not been in the same type of wrapper so they were detecting as unknown. FL format has been considered as a way of detecting fruity plugins rather than using more indirect methods such as using plugin names themselves, this can cross index plugin database information to get a correct idea of what plugins are.   More needs to be done but should hopefully be in place by the next major update to the source. Started to work on midi extraction.  Also started trying to merge the FLProjectOrganizer and FLPTOOLKIT into a common codebase that can use the code from the other in hopes of making FLPtoolkit an extension of FLProjectOrganizer.  Big success in this one is getting the UI to work and successfully export detected midi patterns as .mid. Not entirely sure how working it is yet though.
 
