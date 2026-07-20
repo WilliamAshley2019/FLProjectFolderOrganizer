@@ -277,7 +277,14 @@ namespace FL
         size_t dataSize;
         if (idVal < 64) dataSize = 1;
         else if (idVal < 128) dataSize = 2;
-        else if (idVal < 192) dataSize = 4;
+        else if (idVal < 192) {
+            // EventID 172 is a confirmed exception to the standard 4-byte
+            // dword-range rule - see the reverse-engineering notes in
+            // README.md under "FL Studio 26". Reproduced identically across
+            // two independent real FL 26 files; not yet cross-checked
+            // against any external documentation.
+            dataSize = (idVal == 172) ? 3 : 4;
+        }
         else {
             dataSize = readVarInt(in);
         }
@@ -498,7 +505,7 @@ namespace FL
             return ev;
         }
         default:
-            return std::make_unique<UnknownDataEvent>(buffer.get(), dataSize);
+            return std::make_unique<UnknownDataEvent>(id, buffer.get(), dataSize);
         }
     }
 
@@ -737,7 +744,7 @@ namespace FL
 
     void RemoteControllerEvent::parse(juce::InputStream& in, size_t size)
     {
-        if (size < 22) return;
+        if (size < 20) return; // 2+4+2+2+2+4+4 = 20 bytes total; was previously checking < 22, which discarded every real instance
         in.read(&fields.unknown1, 2);
         fields.unknown1 = leU16FromBytes(&fields.unknown1);
         in.read(&fields.trackId, 4);
@@ -1601,9 +1608,12 @@ namespace FL
 
     std::vector<Track> Arrangement::getTracks() const
     {
-        if (!m_tracksLoaded)
+        auto& trackTreeCache = m_project->getOrBuildTrackCache(m_arrangementIndex);
+        // First call for this arrangement index: actually populate it, using
+        // this Arrangement's own m_tree (Project doesn't have direct access
+        // to figure out which events belong to which arrangement on its own).
+        if (trackTreeCache.empty() && m_tree.hasEvent(EventID::TrackInfo))
         {
-            m_trackTreeCache.clear();
             auto trackInfoEvents = m_tree.getEvents(EventID::TrackInfo);
             auto trackNames = m_tree.getEvents(EventID::TrackName);
             size_t nameCursor = 0;
@@ -1614,13 +1624,12 @@ namespace FL
                     sub.addEvent(std::unique_ptr<Event>(trackNames[nameCursor]->clone()));
                     ++nameCursor;
                 }
-                m_trackTreeCache.push_back(std::move(sub));
+                trackTreeCache.push_back(std::move(sub));
             }
-            m_tracksLoaded = true;
         }
         std::vector<Track> tracks;
-        tracks.reserve(m_trackTreeCache.size());
-        for (auto& tree : m_trackTreeCache)
+        tracks.reserve(trackTreeCache.size());
+        for (auto& tree : trackTreeCache)
             tracks.emplace_back(tree, m_version);
         return tracks;
     }
@@ -1732,21 +1741,21 @@ namespace FL
     }
     std::vector<Slot> Insert::getSlots() const
     {
-        if (!m_slotsLoaded)
+        auto& slotTreeCache = m_project->getOrBuildSlotCache(m_index);
+        if (slotTreeCache.empty() && m_tree.hasEvent(EventID::SlotIID))
         {
             // The FLP format has no explicit "slot boundary" marker beyond
             // SlotIID itself, so we divide on that event.
-            m_slotTreeCache = m_tree.divide(EventID::SlotIID, {
+            slotTreeCache = m_tree.divide(EventID::SlotIID, {
                 EventID::SlotIID, EventID::IsEnabled, EventID::Color,
                 EventID::NewPlugin, EventID::PluginParams, EventID::PluginName,
                 EventID::PluginFactory, EventID::PluginIcon
             });
-            m_slotsLoaded = true;
         }
         std::vector<Slot> slots;
-        slots.reserve(m_slotTreeCache.size());
+        slots.reserve(slotTreeCache.size());
         int idx = 0;
-        for (auto& tree : m_slotTreeCache)
+        for (auto& tree : slotTreeCache)
             slots.emplace_back(tree, m_version, idx++);
         return slots;
     }
@@ -1754,27 +1763,33 @@ namespace FL
     // ---- Mixer ----
     std::vector<Insert> Mixer::getInserts() const
     {
-        if (!m_insertsLoaded)
+        auto& insertTreeCache = m_project->getOrBuildInsertCache();
+        if (insertTreeCache.empty() && m_tree.hasEvent(EventID::InsertOut))
         {
-            // Individual mixer inserts have no explicit "new insert" event; in
-            // practice every insert (including Master, which appears first)
-            // carries exactly one InsertColor event, so we use that as the
-            // dividing marker. This is a documented heuristic, not a format
-            // guarantee the way NewChan/NewPat are for channels/patterns.
-            m_insertTreeCache = m_tree.divide(EventID::InsertColor, {
+            // Individual mixer inserts have no explicit "new insert" event.
+            // InsertColor seemed like a natural marker (every insert we'd
+            // seen carried exactly one), but testing against a file with no
+            // customized mixer state at all showed InsertColor is cosmetic -
+            // it's only written for inserts that were actually touched, so
+            // relying on it silently dropped every untouched insert's real
+            // routing data (0 InsertColor events found, but 105 InsertOut
+            // events - one per insert, Master included - sitting unclaimed).
+            // InsertOut appears to be written unconditionally per insert
+            // regardless of customization, so it's a more reliable marker.
+            // Still a heuristic, not a documented format guarantee.
+            insertTreeCache = m_tree.divide(EventID::InsertOut, {
                 EventID::InsertColor, EventID::IsEnabled, EventID::InsertData,
                 EventID::InsertIcon, EventID::InsertIn, EventID::InsertOut,
                 EventID::InsertRouting, EventID::SlotIID, EventID::NewPlugin,
                 EventID::PluginParams, EventID::PluginName, EventID::PluginFactory,
                 EventID::PluginIcon, EventID::Color
             });
-            m_insertsLoaded = true;
         }
         std::vector<Insert> inserts;
-        inserts.reserve(m_insertTreeCache.size());
+        inserts.reserve(insertTreeCache.size());
         int idx = 0;
-        for (auto& tree : m_insertTreeCache)
-            inserts.emplace_back(tree, m_version, idx++);
+        for (auto& tree : insertTreeCache)
+            inserts.emplace_back(tree, m_version, m_project, idx++);
         return inserts;
     }
     bool Mixer::getAPDC() const
@@ -1790,21 +1805,26 @@ namespace FL
     }
 
     // ---- Project load/save ----
-    std::unique_ptr<Project> Project::load(const juce::File& file)
+    std::unique_ptr<Project> Project::load(const juce::File& file, juce::String* errorOut)
     {
+        auto fail = [&](const juce::String& msg) -> std::unique_ptr<Project> {
+            if (errorOut) *errorOut = msg;
+            return nullptr;
+        };
+
         juce::FileInputStream in(file);
-        if (!in.openedOk()) return nullptr;
+        if (!in.openedOk()) return fail("Could not open file for reading.");
 
         char magic[4];
         if (in.read(magic, 4) != 4 || memcmp(magic, "FLhd", 4) != 0)
-            return nullptr;
+            return fail("Missing FLhd header magic - not an FLP file, or the file is truncated.");
         uint32_t headerSize; in.read(&headerSize, 4);
         int16_t format; in.read(&format, 2);
         uint16_t numChannels; in.read(&numChannels, 2);
         uint16_t ppq; in.read(&ppq, 2);
 
         if (in.read(magic, 4) != 4 || memcmp(magic, "FLdt", 4) != 0)
-            return nullptr;
+            return fail("Missing FLdt header magic after the header block.");
         uint32_t dataSize; in.read(&dataSize, 4);
 
         auto project = std::unique_ptr<Project>(new Project());
@@ -1812,14 +1832,36 @@ namespace FL
         auto tree = std::make_unique<EventTree>();
 
         FLVersion version{ 0,0,0,0 };
+        juce::int64 dataStart = in.getPosition();
+        juce::int64 dataEnd = dataStart + (juce::int64) dataSize;
+        juce::int64 eventStartPos = dataStart;
+        uint8_t idByte = 0;
         try
         {
-            while (in.getPosition() < in.getTotalLength())
+            while (in.getPosition() < in.getTotalLength() && in.getPosition() < dataEnd)
             {
-                uint8_t idByte;
+                eventStartPos = in.getPosition();
                 if (in.read(&idByte, 1) != 1) break;
                 EventID id = static_cast<EventID>(idByte);
                 auto event = Event::read(in, id, version);
+
+                // A variable-length event whose declared size runs past the
+                // end of the FLdt chunk (or the file itself) means we've
+                // desynced somewhere earlier - a fixed-size event upstream
+                // almost certainly consumed the wrong number of bytes for
+                // this file's format version. Fail loudly with the exact
+                // position rather than silently reading garbage or throwing
+                // deep inside Event::read.
+                if (in.getPosition() > in.getTotalLength())
+                {
+                    return fail("Parse desync at byte " + juce::String(eventStartPos)
+                        + " (event id " + juce::String((int) idByte) + "): a preceding event "
+                        + "consumed the wrong number of bytes for this file's format version "
+                        + (version.major > 0 ? ("(FLVersion " + version.toString() + ")") : juce::String())
+                        + ". This usually means a newer FL Studio version changed the byte layout "
+                        + "of an event this parser doesn't handle correctly yet.");
+                }
+
                 if (!event) continue;
 
                 if (id == EventID::Version) {
@@ -1836,12 +1878,12 @@ namespace FL
                 tree->addEvent(std::move(event));
             }
         }
-        catch (const std::exception&)
+        catch (const std::exception& e)
         {
-            // Truncated file, corrupt event, or a parsing desync - fail cleanly
-            // rather than propagate an exception past this function (nothing
-            // above Project::load catches exceptions).
-            return nullptr;
+            return fail(juce::String("Exception while parsing at byte ") + juce::String(eventStartPos)
+                + " (event id " + juce::String((int) idByte) + "): " + e.what()
+                + ". This usually means a preceding event consumed the wrong number of bytes for "
+                + "this file's format version" + (version.major > 0 ? (" (FLVersion " + version.toString() + ")") : juce::String()) + ".");
         }
         project->m_version = version;
         project->m_eventTree = std::move(tree);
@@ -2005,11 +2047,31 @@ namespace FL
                 EventID::TrackInfo, EventID::TrackName, EventID::MarkerPosition,
                 EventID::MarkerText, EventID::TimeSigNumerator, EventID::TimeSigDenominator
                 });
+
+            // Pre-multi-arrangement FL versions have exactly one implicit
+            // arrangement and never write an ArrangementNew marker at all -
+            // so divide() (which only starts collecting after seeing its
+            // separator) finds nothing, even though real TrackInfo/Playlist
+            // data may exist directly in the top-level stream. Fall back to
+            // treating the whole tree as that one implicit arrangement
+            // rather than silently losing real data.
+            if (m_arrangementTreeCache.empty())
+            {
+                auto implicit = m_eventTree->subtree([](const Event* e) {
+                    auto id = e->id();
+                    return id == EventID::Playlist || id == EventID::TrackInfo ||
+                           id == EventID::TrackName || id == EventID::MarkerPosition ||
+                           id == EventID::MarkerText;
+                });
+                if (implicit.size() > 0)
+                    m_arrangementTreeCache.push_back(std::move(implicit));
+            }
+
             m_arrangementsLoaded = true;
         }
         if (index >= 0 && index < (int)m_arrangementTreeCache.size())
-            return Arrangement(m_arrangementTreeCache[(size_t)index], m_version);
-        return Arrangement(m_emptyTree, m_version);
+            return Arrangement(m_arrangementTreeCache[(size_t)index], m_version, this, index);
+        return Arrangement(m_emptyTree, m_version, this, -1);
     }
 
     Mixer Project::getMixer() const
@@ -2029,7 +2091,32 @@ namespace FL
                 });
             m_mixerLoaded = true;
         }
-        return Mixer(m_mixerTreeCache, m_version);
+        return Mixer(m_mixerTreeCache, m_version, this);
+    }
+
+    std::vector<EventTree>& Project::getOrBuildTrackCache(int arrangementIndex) const
+    {
+        static std::vector<EventTree> s_emptyStatic; // fallback-tree case (index < 0): no real arrangement, nothing to cache
+        if (arrangementIndex < 0) return s_emptyStatic;
+
+        if ((int)m_trackTreeCachePerArrangement.size() <= arrangementIndex)
+            m_trackTreeCachePerArrangement.resize((size_t)arrangementIndex + 1);
+        return m_trackTreeCachePerArrangement[(size_t)arrangementIndex];
+    }
+
+    std::vector<EventTree>& Project::getOrBuildInsertCache() const
+    {
+        return m_insertTreeCache;
+    }
+
+    std::vector<EventTree>& Project::getOrBuildSlotCache(int insertIndex) const
+    {
+        static std::vector<EventTree> s_emptyStatic;
+        if (insertIndex < 0) return s_emptyStatic;
+
+        if ((int)m_slotTreeCachePerInsert.size() <= insertIndex)
+            m_slotTreeCachePerInsert.resize((size_t)insertIndex + 1);
+        return m_slotTreeCachePerInsert[(size_t)insertIndex];
     }
 
     std::vector<RemoteControllerEvent*> Project::getAutomationChannels() const

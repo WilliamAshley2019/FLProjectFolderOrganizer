@@ -53,16 +53,18 @@ bool PluginProcessor::loadFLPFile(const juce::File& file)
 {
     juce::ScopedLock lock(projectLock);
     project.reset(); // Clear previous
+    lastLoadError.clear();
     
-    if (!file.existsAsFile()) return false;
+    if (!file.existsAsFile()) { lastLoadError = "File does not exist."; return false; }
     
     try
     {
-        project = FL::Project::load(file);
+        project = FL::Project::load(file, &lastLoadError);
     }
-    catch (const std::exception&)
+    catch (const std::exception& e)
     {
         project.reset();
+        lastLoadError = juce::String("Unexpected exception: ") + e.what();
     }
     return project != nullptr;
 }
@@ -128,6 +130,107 @@ juce::String PluginProcessor::getArrangementReport() const
     
     FL::ArrangementDumper dumper(*project);
     return dumper.generateTextReport();
+}
+
+juce::String PluginProcessor::getCleanupReport() const
+{
+    juce::ScopedLock lock(projectLock);
+    if (!project) return "No project loaded.";
+
+    // Cleaner counts unused patterns/channels but doesn't remove anything
+    // from the loaded project (see the note in Cleaner::removeUnusedPatterns) -
+    // this is a read-only report, safe to run on a const-accessed project.
+    FL::CleanupReport report;
+    FL::Cleaner::runAll(*project, report);
+
+    juce::StringArray lines;
+    lines.add("=== CLEANUP REPORT (informational only - nothing has been removed) ===");
+    lines.add(report.toString());
+    lines.add("");
+    lines.add(report.removedPatterns > 0 || report.removedChannels > 0
+        ? "These patterns/channels aren't referenced anywhere else in the project."
+        : "Nothing found - every pattern and channel is referenced somewhere.");
+
+    // "Referenced" for patterns is determined entirely from the modern
+    // Playlist blob event. Very old files use a legacy per-clip format
+    // (PlayListItem, id 129) this parser doesn't read yet - on those files
+    // every pattern looks unreferenced even if it's genuinely used, since
+    // we simply can't see the playlist at all. Flag that explicitly rather
+    // than let a misleadingly large "unused" count go unexplained.
+    auto arr = project->getArrangement(0);
+    if (arr.getPlaylistItems().empty() && !project->getPatterns().empty())
+    {
+        lines.add("");
+        lines.add("NOTE: This project's playlist appears empty or unreadable - if this is an "
+            "older FL Studio file, it may be using the legacy per-clip playlist format this "
+            "parser doesn't support yet (see README). If so, the pattern-unused count above "
+            "is unreliable: it may be flagging patterns that are actually used in the playlist, "
+            "just in a format we can't currently see.");
+    }
+
+    return lines.joinIntoString("\n");
+}
+
+juce::String PluginProcessor::compareWithFile(const juce::File& otherFile)
+{
+    juce::ScopedLock lock(projectLock);
+    if (!project) return "Load a project first before comparing.";
+    if (!otherFile.existsAsFile()) return "File not found.";
+
+    std::unique_ptr<FL::Project> otherProject;
+    try
+    {
+        otherProject = FL::Project::load(otherFile);
+    }
+    catch (const std::exception&)
+    {
+        otherProject.reset();
+    }
+    if (!otherProject) return "Could not parse: " + otherFile.getFileName();
+
+    auto diffs = FL::Comparer::compare(*project, *otherProject);
+
+    juce::StringArray lines;
+    lines.add("=== COMPARISON: current project vs. " + otherFile.getFileName() + " ===");
+    if (diffs.empty())
+    {
+        lines.add("No differences found in the categories currently compared (tempo, channel presence).");
+    }
+    else
+    {
+        for (const auto& d : diffs)
+            lines.add(d.category + " \"" + d.itemName + "\" - " + d.property + ": "
+                + d.oldValue + " -> " + d.newValue);
+    }
+    return lines.joinIntoString("\n");
+}
+
+bool PluginProcessor::saveProjectAs(const juce::File& destFile)
+{
+    juce::ScopedLock lock(projectLock);
+    if (!project) return false;
+    try
+    {
+        project->save(destFile);
+        return true;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
+juce::String PluginProcessor::exportFullDataAsJson(const juce::File& outputJsonFile)
+{
+    juce::ScopedLock lock(projectLock);
+    if (!project) return "No project loaded.";
+
+    auto json = FL::ProjectJsonExporter::exportToJson(*project);
+    if (!outputJsonFile.replaceWithText(json))
+        return "Failed to write JSON file - check that the destination folder is writable.";
+
+    return "Exported full project data (" + juce::String(json.length()) + " characters) to:\n"
+         + outputJsonFile.getFullPathName();
 }
 
 juce::String PluginProcessor::exportPatternsToMidi(const juce::File& outputMidiFile)

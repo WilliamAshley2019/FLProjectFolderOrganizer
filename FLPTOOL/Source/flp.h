@@ -285,6 +285,9 @@ namespace FL
     {
         int major, minor, patch, build = 0;
         bool operator>=(const FLVersion& other) const;
+        juce::String toString() const {
+            return juce::String(major) + "." + juce::String(minor) + "." + juce::String(patch) + "." + juce::String(build);
+        }
     };
 
     // =============================================================================
@@ -410,9 +413,9 @@ namespace FL
     // ----- Unknown data event (fallback) -----
     class UnknownDataEvent final : public Event {
     public:
-        UnknownDataEvent(const uint8_t* data, size_t size) : Event(EventID::Text), m_data(data, size) {}
+        UnknownDataEvent(EventID eid, const uint8_t* data, size_t size) : Event(eid), m_data(data, size) {}
         void write(juce::OutputStream& out) const override;
-        std::unique_ptr<Event> clone() const override { return std::make_unique<UnknownDataEvent>(static_cast<const uint8_t*>(m_data.getData()), m_data.getSize()); }
+        std::unique_ptr<Event> clone() const override { return std::make_unique<UnknownDataEvent>(id(), static_cast<const uint8_t*>(m_data.getData()), m_data.getSize()); }
         juce::MemoryBlock m_data;
     };
 
@@ -831,13 +834,15 @@ namespace FL
     class Arrangement
     {
     public:
-        Arrangement(EventTree& tree, const FLVersion& version) : m_tree(tree), m_version(version) {}
+        Arrangement(EventTree& tree, const FLVersion& version, const Project* project, int arrangementIndex)
+            : m_tree(tree), m_version(version), m_project(project), m_arrangementIndex(arrangementIndex) {}
         int getIID() const;
         juce::String getName() const;
         void setName(const juce::String& name);
-        // NOTE: getTracks() lazily builds and caches per-track subtrees on this
-        // Arrangement instance. Keep the Arrangement object alive for as long as
-        // the returned Track objects are in use (they hold references into the cache).
+        // Track subtrees are cached on the owning Project, not here, so
+        // Arrangement is safe to use as a temporary (e.g.
+        // project->getArrangement(0).getTracks() works correctly) - only
+        // Project itself needs to outlive the returned Track objects.
         std::vector<Track> getTracks() const;
         std::vector<PlaylistItem> getPlaylistItems() const;
         void setPlaylistItems(const std::vector<PlaylistItem>& items);
@@ -846,8 +851,8 @@ namespace FL
     private:
         EventTree& m_tree;
         FLVersion m_version;
-        mutable std::vector<EventTree> m_trackTreeCache;
-        mutable bool m_tracksLoaded = false;
+        const Project* m_project;
+        int m_arrangementIndex;
     };
 
     // ---- Mixer ----
@@ -872,14 +877,15 @@ namespace FL
     class Insert
     {
     public:
-        Insert(EventTree& tree, const FLVersion& version, int index = 0) : m_tree(tree), m_version(version), m_index(index) {}
+        Insert(EventTree& tree, const FLVersion& version, const Project* project, int index = 0)
+            : m_tree(tree), m_version(version), m_project(project), m_index(index) {}
         int getIID() const { return m_index; } // inserts have no explicit IID event; index of appearance is used
         juce::String getName() const;
         void setName(const juce::String& name);
         juce::Colour getColor() const;
         void setColor(const juce::Colour& c);
-        // NOTE: getSlots() lazily builds and caches per-slot subtrees on this
-        // Insert instance. Keep the Insert object alive while using returned Slots.
+        // Slot subtrees are cached on the owning Project - see the note on
+        // Arrangement above; the same reasoning applies here.
         std::vector<Slot> getSlots() const;
         bool isEnabled() const;
         void setEnabled(bool enabled);
@@ -887,32 +893,31 @@ namespace FL
     private:
         EventTree& m_tree;
         FLVersion m_version;
+        const Project* m_project;
         int m_index;
-        mutable std::vector<EventTree> m_slotTreeCache;
-        mutable bool m_slotsLoaded = false;
     };
 
     class Mixer
     {
     public:
-        Mixer(EventTree& tree, const FLVersion& version) : m_tree(tree), m_version(version) {}
-        // NOTE: getInserts() lazily builds and caches per-insert subtrees on this
-        // Mixer instance. Keep the Mixer object alive while using returned Inserts.
+        Mixer(EventTree& tree, const FLVersion& version, const Project* project)
+            : m_tree(tree), m_version(version), m_project(project) {}
+        // Insert subtrees are cached on the owning Project - see the note on
+        // Arrangement above; the same reasoning applies here.
         std::vector<Insert> getInserts() const;
         bool getAPDC() const;
         void setAPDC(bool on);
     private:
         EventTree& m_tree;
         FLVersion m_version;
-        mutable std::vector<EventTree> m_insertTreeCache;
-        mutable bool m_insertsLoaded = false;
+        const Project* m_project;
     };
 
     // ---- Project ----
     class Project
     {
     public:
-        static std::unique_ptr<Project> load(const juce::File& file);
+        static std::unique_ptr<Project> load(const juce::File& file, juce::String* errorOut = nullptr);
         void save(const juce::File& file) const;
 
         // Metadata
@@ -983,6 +988,26 @@ namespace FL
         mutable bool m_mixerLoaded = false;
 
         mutable EventTree m_emptyTree; // stable fallback for out-of-range arrangement lookups
+
+        // Track/Insert/Slot sub-caches, owned here rather than by Arrangement/
+        // Mixer/Insert themselves. Those are lightweight view objects very
+        // naturally used as temporaries (e.g. project->getArrangement(0).getTracks()
+        // reads perfectly reasonably) - if they owned their own sub-caches,
+        // that pattern would silently return dangling references the moment
+        // the temporary is destroyed. Owning the caches here instead means
+        // any number of temporary Arrangement/Mixer/Insert objects can be
+        // constructed and discarded freely; only Project itself needs to
+        // outlive the Track/Insert/Slot objects derived from it.
+    public:
+        std::vector<EventTree>& getOrBuildTrackCache(int arrangementIndex) const;
+        std::vector<EventTree>& getOrBuildInsertCache() const;
+        std::vector<EventTree>& getOrBuildSlotCache(int insertIndex) const;
+    private:
+        mutable std::vector<std::vector<EventTree>> m_trackTreeCachePerArrangement;
+
+        mutable std::vector<EventTree> m_insertTreeCache;
+
+        mutable std::vector<std::vector<EventTree>> m_slotTreeCachePerInsert;
     };
 
 } // namespace FL

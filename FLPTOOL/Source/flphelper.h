@@ -210,7 +210,7 @@ namespace FL
     // 9. Project Statistics Dashboard
     // =========================================================================
     struct ProjectStats {
-        int totalChannels = 0, samplerChannels = 0, nativePluginChannels = 0, automationChannels = 0;
+        int totalChannels = 0, samplerChannels = 0, audioClipChannels = 0, nativePluginChannels = 0, automationChannels = 0;
         int totalPatterns = 0, totalNotes = 0, totalPatternControllers = 0;
         int totalTracks = 0, totalPlaylistItems = 0, totalAutomationPoints = 0;
         uint32_t maxPlaylistTick = 0;
@@ -227,5 +227,19 @@ namespace FL
         static void analyzePatterns(const Project& project, ProjectStats& stats);
         static void analyzeArrangement(const Project& project, ProjectStats& stats);
         static void analyzeTempoAndDuration(const Project& project, ProjectStats& stats);
+    };
+
+    // =========================================================================
+    // 10. Full structured JSON export
+    // =========================================================================
+    // Dumps everything Project already parses (channels, patterns/notes,
+    // arrangement/tracks/playlist, mixer/inserts/slots) into one JSON
+    // document, for use in external tools/scripts without going through FL
+    // Studio at all. Deliberately just a serialization of the existing data
+    // model - no new parsing, so it's exactly as reliable (and exactly as
+    // limited, e.g. legacy playlist format) as everything else here.
+    class ProjectJsonExporter {
+    public:
+        static juce::String exportToJson(const Project& project);
     };
 }

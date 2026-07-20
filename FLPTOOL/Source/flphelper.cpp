@@ -99,15 +99,27 @@ namespace FL
             juce::String displayName = ch->getName();
             juce::String internalName = ch->getInternalName();
 
-            // A handful of very old Image-Line generators (pre-dating the
-            // "Fruity X" wrapper naming convention entirely) store their own
-            // name directly as the PluginFactory string, with nothing that
-            // distinguishes them from a real 3rd-party plugin's factory name.
-            // Each entry below was confirmed against an actual project file
-            // during testing, not guessed - add to this list as more old
-            // files get checked rather than assuming the pattern generalizes.
-            static const std::unordered_set<juce::String> kKnownLegacyNativeFactoryNames = {
-                "Plucked!", // confirmed via a FruityLoops-era project (physical-modeling plucked string generator)
+            // Audio clips (playlist-placed audio, sliceable/fadeable directly
+            // in the playlist) have no plugin wrapper either - same as a
+            // genuine wrapper-less native synth like TS404 - but they have a
+            // real sample path and no instrument/envelope settings, since
+            // they're just a sample container, not a generator. Confirmed via
+            // a real project: ChannelType::Instrument covers both true
+            // multi-out instrument channels AND audio clips, distinguished
+            // only by whether a sample path is actually set. These aren't
+            // plugin instances at all, so they don't belong in this report.
+            if (internalName.isEmpty() && ch->getSamplePath().isNotEmpty()) { continue; }
+
+            // Image-Line generators with their own factory name - neither the
+            // "Fruity X" wrapper convention nor "Fruity Wrapper" (used for
+            // externally-hosted VST/VST3/CLAP plugins) - so nothing in the
+            // name itself marks them as native. Each entry below was
+            // confirmed against a real project file, not guessed; add to
+            // this list as more get checked rather than assuming it
+            // generalizes to every Image-Line plugin.
+            static const std::unordered_set<juce::String> kKnownNativeFactoryNames = {
+                "Plucked!", // FruityLoops-era physical-modeling plucked string generator
+                "FLEX",     // modern Image-Line rompler/sampler
             };
 
             // Three real cases here, not two:
@@ -128,11 +140,11 @@ namespace FL
             bool isNative = !hasWrapper
                           || internalName.startsWith("Fruity")
                           || internalName.startsWith("FL")
-                          || kKnownLegacyNativeFactoryNames.count(internalName) > 0;
+                          || kKnownNativeFactoryNames.count(internalName) > 0;
 
             juce::String vendor = isNative ? "Image-Line" : "Third-Party";
             if (!hasWrapper) vendor = "Image-Line (built-in engine synth)";
-            else if (kKnownLegacyNativeFactoryNames.count(internalName) > 0) vendor = "Image-Line (legacy native generator)";
+            else if (kKnownNativeFactoryNames.count(internalName) > 0) vendor = "Image-Line (confirmed native plugin)";
             else if (auto found = pluginDB.lookup(internalName))
                 vendor = found->vendorName.isNotEmpty() ? found->vendorName : vendor;
             
@@ -206,6 +218,30 @@ namespace FL
     // =========================================================================
     // 3. Arrangement Dumper
     // =========================================================================
+    namespace {
+        // Builds the composite display name FL Studio's own UI shows for an
+        // automation clip ("Digilog - Filter cutoff") by combining the
+        // automation channel's own name with its link target's name. The
+        // link itself (RemoteController: trackId = automation channel's own
+        // IID, destId = target channel IID) sits outside every channel's own
+        // subtree in the file - it's a separate top-level section between
+        // patterns and channels - which is why this can't just be read off
+        // the automation channel directly.
+        juce::String resolveAutomationDisplayName(const Project& project, const Channel* automationChannel)
+        {
+            juce::String ownName = automationChannel->getName();
+            for (auto* rc : project.getAutomationChannels()) {
+                if ((int) rc->fields.trackId != automationChannel->getIID()) continue;
+                for (auto* target : project.getChannels()) {
+                    if (target->getIID() == (int) rc->fields.destId)
+                        return target->getName() + " - " + ownName;
+                }
+                break; // matched the link but couldn't resolve destId to a real channel
+            }
+            return ownName;
+        }
+    }
+
     std::vector<ArrangementTrack> ArrangementDumper::getTracks() const {
         std::vector<ArrangementTrack> tracks;
         Arrangement arr = project.getArrangement(0);
@@ -227,15 +263,44 @@ namespace FL
     }
     juce::String ArrangementDumper::generateTextReport() const {
         std::stringstream ss; int ppq = project.getPPQ(); auto tracks = getTracks();
+
+        // Build lookup maps once: pattern IID -> name, channel IID -> (name, type)
+        std::unordered_map<int, juce::String> patternNames;
+        for (auto& p : project.getPatterns()) patternNames[p.getIID()] = p.getName();
+        std::unordered_map<int, Channel*> channelsByIid;
+        for (auto* ch : project.getChannels()) channelsByIid[ch->getIID()] = ch;
+
         for (const auto& t : tracks) {
             ss << "Track " << t.index << ": \"" << t.name.toStdString() << "\"";
             if (t.isMuted) ss << " [MUTED]";
             ss << " (" << t.clips.size() << " clips)\n";
             for (const auto& c : t.clips) {
-                bool isPattern = (c.itemIndex > 0 && c.patternBase == 20480);
-                ss << "  - " << (isPattern ? "Pattern " : "Audio ") 
-                   << "Pos: " << formatTime(c.position, ppq).toStdString()
-                   << " Len: " << formatTime(c.length, ppq).toStdString() << "\n";
+                ss << "  Pos: " << formatTime(c.position, ppq).toStdString()
+                   << " Len: " << formatTime(c.length, ppq).toStdString() << " - ";
+
+                // itemIndex >= patternBase means this clip references a
+                // pattern (itemIndex - patternBase = pattern number);
+                // otherwise itemIndex IS a channel IID directly (an audio
+                // clip or automation clip placed straight on the timeline).
+                if (c.itemIndex >= c.patternBase) {
+                    int patternIid = c.itemIndex - c.patternBase;
+                    auto it = patternNames.find(patternIid);
+                    ss << "Pattern " << patternIid;
+                    if (it != patternNames.end() && it->second.isNotEmpty())
+                        ss << " \"" << it->second.toStdString() << "\"";
+                } else {
+                    auto it = channelsByIid.find(c.itemIndex);
+                    if (it == channelsByIid.end()) {
+                        ss << "Unknown clip (channel IID " << c.itemIndex << " not found)";
+                    } else {
+                        auto* ch = it->second;
+                        if (ch->getType() == ChannelType::Automation)
+                            ss << "Automation clip \"" << resolveAutomationDisplayName(project, ch).toStdString() << "\"";
+                        else
+                            ss << "Audio clip \"" << ch->getName().toStdString() << "\"";
+                    }
+                }
+                ss << "\n";
             }
         }
         return juce::String(ss.str());
@@ -512,7 +577,18 @@ namespace FL
             if (!ch) continue;
             switch (ch->getType()) {
                 case ChannelType::Sampler: stats.samplerChannels++; break;
-                case ChannelType::Native: case ChannelType::Instrument: stats.nativePluginChannels++; break;
+                case ChannelType::Native: case ChannelType::Instrument: {
+                    // Audio clips (playlist-placeable, but can also be played
+                    // from channel rack patterns) use these same ChannelType
+                    // values as true generator plugins, with no wrapper and a
+                    // real sample path as the only distinguishing signal -
+                    // they're their own sampler subtype, not a plugin.
+                    if (ch->getInternalName().isEmpty() && ch->getSamplePath().isNotEmpty())
+                        stats.audioClipChannels++;
+                    else
+                        stats.nativePluginChannels++;
+                    break;
+                }
                 case ChannelType::Automation: {
                     stats.automationChannels++;
                     const EventTree& tree = ch->getEventTree();
@@ -549,10 +625,179 @@ namespace FL
         lines.add("=== FL STUDIO PROJECT DASHBOARD ===");
         lines.add("Initial Tempo: " + juce::String(initialTempo, 2) + " BPM | Average: " + juce::String(averageTempo, 2) + " BPM");
         lines.add("Duration: " + juce::String(durationSeconds, 2) + "s (" + juce::String(durationBeats, 1) + " beats)");
-        lines.add("Channels: " + juce::String(totalChannels) + " (Samplers: " + juce::String(samplerChannels) + ", Plugins: " + juce::String(nativePluginChannels) + ")");
+        lines.add("Channels: " + juce::String(totalChannels) + " (Samplers: " + juce::String(samplerChannels) + ", Audio Clips: " + juce::String(audioClipChannels) + ", Plugins: " + juce::String(nativePluginChannels) + ")");
         lines.add("Patterns: " + juce::String(totalPatterns) + " | Notes: " + juce::String(totalNotes));
         lines.add("Tracks: " + juce::String(totalTracks) + " | Clips: " + juce::String(totalPlaylistItems));
         lines.add("Automation Points: " + juce::String(totalAutomationPoints));
         return lines.joinIntoString("\n");
+    }
+
+    // =========================================================================
+    // 10. Full structured JSON export
+    // =========================================================================
+    namespace {
+        juce::String channelTypeName(ChannelType t) {
+            switch (t) {
+                case ChannelType::Sampler:    return "Sampler";
+                case ChannelType::Native:     return "Native";
+                case ChannelType::Layer:      return "Layer";
+                case ChannelType::Instrument: return "Instrument";
+                case ChannelType::Automation: return "Automation";
+                default: return "Unknown";
+            }
+        }
+        juce::String colourToHex(const juce::Colour& c) {
+            return "#" + juce::String::toHexString((int)c.getRed()).paddedLeft('0', 2)
+                       + juce::String::toHexString((int)c.getGreen()).paddedLeft('0', 2)
+                       + juce::String::toHexString((int)c.getBlue()).paddedLeft('0', 2);
+        }
+    }
+
+    juce::String ProjectJsonExporter::exportToJson(const Project& project)
+    {
+        auto root = std::make_unique<juce::DynamicObject>();
+
+        // ---- metadata ----
+        {
+            auto md = project.getMetadata();
+            auto meta = std::make_unique<juce::DynamicObject>();
+            meta->setProperty("title", md.title);
+            meta->setProperty("author", md.author);
+            meta->setProperty("genre", md.genre);
+            meta->setProperty("comments", md.comments);
+            meta->setProperty("tempo", project.getTempo());
+            meta->setProperty("ppq", project.getPPQ());
+            root->setProperty("metadata", juce::var(meta.release()));
+        }
+
+        // ---- channels ----
+        {
+            juce::Array<juce::var> channelsArr;
+            for (auto* ch : project.getChannels()) {
+                auto c = std::make_unique<juce::DynamicObject>();
+                c->setProperty("iid", ch->getIID());
+                c->setProperty("name", ch->getName());
+                c->setProperty("type", channelTypeName(ch->getType()));
+                c->setProperty("internalName", ch->getInternalName());
+                c->setProperty("samplePath", ch->getSamplePath());
+                c->setProperty("enabled", ch->isEnabled());
+                c->setProperty("color", colourToHex(ch->getColor()));
+                if (auto v = ch->getVolume()) c->setProperty("volume", *v);
+                if (auto p = ch->getPan()) c->setProperty("pan", *p);
+                channelsArr.add(juce::var(c.release()));
+            }
+            root->setProperty("channels", channelsArr);
+        }
+
+        // ---- patterns ----
+        {
+            juce::Array<juce::var> patternsArr;
+            for (auto& p : project.getPatterns()) {
+                auto po = std::make_unique<juce::DynamicObject>();
+                po->setProperty("iid", p.getIID());
+                po->setProperty("name", p.getName());
+                juce::Array<juce::var> notesArr;
+                for (auto& n : p.getNotes()) {
+                    auto no = std::make_unique<juce::DynamicObject>();
+                    no->setProperty("position", (int) n.position);
+                    no->setProperty("length", (int) n.length);
+                    no->setProperty("key", n.key);
+                    no->setProperty("channelIID", n.channelIID);
+                    no->setProperty("velocity", n.velocity);
+                    no->setProperty("pan", n.pan);
+                    notesArr.add(juce::var(no.release()));
+                }
+                po->setProperty("notes", notesArr);
+                patternsArr.add(juce::var(po.release()));
+            }
+            root->setProperty("patterns", patternsArr);
+        }
+
+        // ---- arrangement ----
+        {
+            auto arr = project.getArrangement(0);
+            auto ao = std::make_unique<juce::DynamicObject>();
+            ao->setProperty("name", arr.getName());
+
+            juce::Array<juce::var> tracksArr;
+            for (auto& t : arr.getTracks()) {
+                auto to = std::make_unique<juce::DynamicObject>();
+                to->setProperty("iid", t.getIID());
+                to->setProperty("name", t.getName());
+                to->setProperty("muted", t.isMuted());
+                to->setProperty("color", colourToHex(t.getColor()));
+                tracksArr.add(juce::var(to.release()));
+            }
+            ao->setProperty("tracks", tracksArr);
+
+            juce::Array<juce::var> itemsArr;
+            std::unordered_map<int, juce::String> patternNamesForJson;
+            for (auto& p : project.getPatterns()) patternNamesForJson[p.getIID()] = p.getName();
+            std::unordered_map<int, Channel*> channelsByIidForJson;
+            for (auto* ch : project.getChannels()) channelsByIidForJson[ch->getIID()] = ch;
+
+            for (auto& item : arr.getPlaylistItems()) {
+                auto io = std::make_unique<juce::DynamicObject>();
+                io->setProperty("position", (int) item.position);
+                io->setProperty("length", (int) item.length);
+                io->setProperty("trackRvidx", item.trackRvidx);
+
+                // See the identical logic (and the reasoning behind it) in
+                // ArrangementDumper::generateTextReport() above: itemIndex >=
+                // patternBase means a pattern reference; otherwise itemIndex
+                // is a channel IID directly (audio clip or automation clip).
+                if (item.itemIndex >= item.patternBase) {
+                    int patternIid = item.itemIndex - item.patternBase;
+                    io->setProperty("kind", "pattern");
+                    io->setProperty("patternIid", patternIid);
+                    auto it = patternNamesForJson.find(patternIid);
+                    io->setProperty("name", it != patternNamesForJson.end() ? it->second : juce::String());
+                } else {
+                    auto it = channelsByIidForJson.find(item.itemIndex);
+                    if (it == channelsByIidForJson.end()) {
+                        io->setProperty("kind", "unknown");
+                        io->setProperty("channelIid", item.itemIndex);
+                    } else {
+                        auto* ch = it->second;
+                        bool isAutomation = ch->getType() == ChannelType::Automation;
+                        io->setProperty("kind", isAutomation ? "automationClip" : "audioClip");
+                        io->setProperty("channelIid", item.itemIndex);
+                        io->setProperty("name", isAutomation ? resolveAutomationDisplayName(project, ch) : ch->getName());
+                    }
+                }
+                itemsArr.add(juce::var(io.release()));
+            }
+            ao->setProperty("playlistItems", itemsArr);
+
+            root->setProperty("arrangement", juce::var(ao.release()));
+        }
+
+        // ---- mixer ----
+        {
+            auto mixer = project.getMixer();
+            auto mo = std::make_unique<juce::DynamicObject>();
+            juce::Array<juce::var> insertsArr;
+            for (auto& ins : mixer.getInserts()) {
+                auto io = std::make_unique<juce::DynamicObject>();
+                io->setProperty("index", ins.getIID());
+                io->setProperty("name", ins.getName());
+                io->setProperty("enabled", ins.isEnabled());
+                io->setProperty("color", colourToHex(ins.getColor()));
+                juce::Array<juce::var> slotsArr;
+                for (auto& slot : ins.getSlots()) {
+                    auto so = std::make_unique<juce::DynamicObject>();
+                    so->setProperty("index", slot.getIndex());
+                    so->setProperty("name", slot.getName());
+                    so->setProperty("enabled", slot.isEnabled());
+                    slotsArr.add(juce::var(so.release()));
+                }
+                io->setProperty("slots", slotsArr);
+                insertsArr.add(juce::var(io.release()));
+            }
+            mo->setProperty("inserts", insertsArr);
+            root->setProperty("mixer", juce::var(mo.release()));
+        }
+
+        return juce::JSON::toString(juce::var(root.release()));
     }
 }
