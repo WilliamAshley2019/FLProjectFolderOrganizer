@@ -41,6 +41,55 @@ I thought I might as well start documenting some background info regarding solut
 │                                    │ └── Position, Length                        │
 └────────────────────────────────────┴───────────────────────────────────────────────┘
 ```
+Offset  | Size | Type    | Description
+--------|------|---------|----------------------------
+0       | 4    | int32   | Unknown (flags/type?)
+4       | 4    | int32   | Position or beat increment?
+8       | 8    | double  | Position (PPQ ticks)
+16      | 8    | double  | Value (normalized 0.0-1.0)
+
+The Header (13 bytes)??
+
+Record Structure (24 bytes = stride-24)
+Each record has at least:
+
+A position/beat value at offset 0-7 (as double or int32)
+
+An unknown field at offset 8-15
+
+A value at offset 16-23 (double, normalized 0.0-1.0)
+
+Curve Type (Unknown1) Values:
+Value	Likely Curve Type
+0x00	Linear (no curve)
+0x01	Single Curve
+0x02	Double Curve (S-curve)
+0x08	Something special (endpoint marker)
+Control/Position (Unknown0) Values:
+Value	Meaning
+0x00	Interior point
+0x03	Start/end marker?
+-1 (0xFFFFFFFF)	Something else (maybe a sentinel)
+1. Single Curve → Bezier with tension
+2. Double Curve → S-curve (ease-in-out) 
+3. Hold → Step (no interpolation)
+4. Stairs → Quantized steps
+5. Smooth → Cubic spline
+
+Not 100% sure about this but this is the best guess right now.
+
+struct AutomationClipRecord {
+    int32_t  controlCode;   // 0 = interior, 3 = endpoint, -1 = sentinel
+    int32_t  curveType;     // 0 = linear, 1 = single, 2 = double, 8 = endpoint
+    double   position;      // PPQ ticks (relative to clip start)
+    double   value;         // Normalized 0.0-1.0
+};
+ 
+
+enum class AutomationCurveType : int32_t {
+    Linear = 0,        // Straight line between points
+    SingleCurve = 1,   // Bezier with tension
+    DoubleCurve = 2,   // S-curve (ease-in-out)
 
 
 2026-07-12 started to resolve the plugin detection code to attempt to read fl native plugins correct etc. Part of that bug was that internal engine plugins such as TS404 and drumsynth may have not been in the same type of wrapper so they were detecting as unknown. FL format has been considered as a way of detecting fruity plugins rather than using more indirect methods such as using plugin names themselves, this can cross index plugin database information to get a correct idea of what plugins are.   More needs to be done but should hopefully be in place by the next major update to the source. Started to work on midi extraction.  Also started trying to merge the FLProjectOrganizer and FLPTOOLKIT into a common codebase that can use the code from the other in hopes of making FLPtoolkit an extension of FLProjectOrganizer.  Big success in this one is getting the UI to work and successfully export detected midi patterns as .mid. Not entirely sure how working it is yet though.
