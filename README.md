@@ -14,6 +14,34 @@ I have a sense there is so much stuff that could be going on in a flp that it wi
 
 TO do: figure out how automation clip points work so automation data can be properly extracted. Automation events and automation clips have evolved so wrapping my head around how the data is housed in the flp will need a little attention. Adding links to more useful tools https://github.com/monadgroup/FLParser
 
+I thought I might as well start documenting some background info regarding solutions.  Its also important to note that the flp format seems to more or less be stable but versions added features as new functions within fl studio were added. I havn't quite wrapped my head around these, but I think that automations will wwork in the next update. Current assumption is alues stride-24 with the value offset 16, not 100% sure on this testing.  Automation Curves arn't quite solved for yet.  I will see if I can find this specific info somewhere online.
+┌─────────────────────────────────────────────────────────────────────┐
+│                         FLP Binary File                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────────┐          ┌─────────────────────────────────┐ │
+│  │ Legacy Automation │          │  Modern Automation Clip         │ │
+│  │ (Pattern-Bound)   │          │  (Channel-Based)               │ │
+│  ├──────────────────┤          ├─────────────────────────────────┤ │
+│  │ PatternCtrlsEvent │          │  RemoteControllerEvent (227)   │ │
+│  │ (EventID 223)     │          │  └── Links to target           │ │
+│  │ └── Controller[]  │          │                                 │ │
+│  │     ├─ position   │          │  AutomationEvent (234)          │ │
+│  │     ├─ channelIID │          │  └── AutomationPoint[]         │ │
+│  │     └─ value      │          │      ├─ beatIncrement         │ │
+│  └──────────────────┘          │      ├─ value                 │ │
+│                                │      ├─ tension                │ │
+│                                │      └─ direction/unknown      │ │
+│                                │                                 │ │
+│                                │  PluginSettings (blob)         │ │
+│                                │  └── Curve type?               │ │
+│                                │                                 │ │
+│                                │  ChannelPlaylistItem           │ │
+│                                │  └── Position, Length          │ │
+│                                └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+
+
 2026-07-12 started to resolve the plugin detection code to attempt to read fl native plugins correct etc. Part of that bug was that internal engine plugins such as TS404 and drumsynth may have not been in the same type of wrapper so they were detecting as unknown. FL format has been considered as a way of detecting fruity plugins rather than using more indirect methods such as using plugin names themselves, this can cross index plugin database information to get a correct idea of what plugins are.   More needs to be done but should hopefully be in place by the next major update to the source. Started to work on midi extraction.  Also started trying to merge the FLProjectOrganizer and FLPTOOLKIT into a common codebase that can use the code from the other in hopes of making FLPtoolkit an extension of FLProjectOrganizer.  Big success in this one is getting the UI to work and successfully export detected midi patterns as .mid. Not entirely sure how working it is yet though.
 
 To do, build out UI functions for processes that are possible but not accessible via UI.
