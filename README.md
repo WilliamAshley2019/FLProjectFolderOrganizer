@@ -41,6 +41,9 @@ I thought I might as well start documenting some background info regarding solut
 │                                    │ └── Position, Length                        │
 └────────────────────────────────────┴───────────────────────────────────────────────┘
 ```
+
+Best Guesses?  This may not be correct
+
 Offset  | Size | Type    | Description
 --------|------|---------|----------------------------
 0       | 4    | int32   | Unknown (flags/type?)
