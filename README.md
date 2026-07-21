@@ -15,7 +15,7 @@ I have a sense there is so much stuff that could be going on in a flp that it wi
 TO do: figure out how automation clip points work so automation data can be properly extracted. Automation events and automation clips have evolved so wrapping my head around how the data is housed in the flp will need a little attention. Adding links to more useful tools https://github.com/monadgroup/FLParser
 
 I thought I might as well start documenting some background info regarding solutions.  Its also important to note that the flp format seems to more or less be stable but versions added features as new functions within fl studio were added. I havn't quite wrapped my head around these, but I think that automations will wwork in the next update. Current assumption is alues stride-24 with the value offset 16, not 100% sure on this testing.  Automation Curves arn't quite solved for yet.  I will see if I can find this specific info somewhere online.
-## FLP Automation Structure?
+## FLP Automation Structure? Not sure yet.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────┐
