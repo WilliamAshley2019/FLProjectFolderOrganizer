@@ -5,6 +5,14 @@ This project is independent and is not affiliated with Image-Line / FL Studio. T
 
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
+
+2026-07-22 - Minor update automatoins are now sort of detecting in the automation tool WARNING, the tool still isn't optimized, I need to figure out exactly what I would like it to do. I will likely like to draw the automation so people can see what they are doing to it. NOTE: NO WRITE FUNCTIONS HAVE BEEN TESTED AT ALL YET. DO NOT USE AN ORIGINAL FLP TO MODIFY AUTOMATIONS UNLESS YOU ARE WILLING TO CORRUPT THAT FILE, AS I DON"T KNOW WHAT TYPE OF ANTIFILE CORRUPTION STUFF FLP files have written into them I have yet to attempt to modify data in a flp with this tool, only extract it. It may be some time before I figure this out.  Currently I do not have plugin loading quite right in the write process so DO NOT ATTEMPT TO MODIFY ANY AUTOMATION CURVES YOU WILL LIKELY CORRUPT YOUR PROJECT. However the big milestone is that it now detects the automation IID.   It shoudl not be underestimated how useful figuring out how automations functino partially (I think there is more to it still) was as far as getting past that roadblock. For likely doing more with translating flp files for other purposes as automation data is pretty important to preserve.
+
+TO DO refine detection outputs
+add automation visual representation
+determine a way to extract automations in some usable way.
+??? fix the ability to modify / write to flp files in a way that preserves file integrity???????? not sure about this as there are some issues with facilitating direct file rewrites of some of the data, so need to think about this more.
+
 2026-07-20 after a fast week of doing an extended water / tea fast which is continuing there was some slight progress on the project. Added .json export of some project data. 
 Some of the plugin and sample stuff is working a little better to include audio clips however its still not 100% I will likely need to cross link the plugin database because I am detecting
 the plugin "title" rather than the plugin type for some synth instruments. This will likely be ironed out with fairly simple cross linking of data not 100% sure the structure yet likely
