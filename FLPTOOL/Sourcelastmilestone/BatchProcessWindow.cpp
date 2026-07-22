@@ -27,10 +27,10 @@ BatchProcessComponent::BatchProcessComponent()
     addAndMakeVisible(clearFilesBtn);
     clearFilesBtn.setButtonText("Clear");
     clearFilesBtn.onClick = [this]
-        {
-            selectedFiles.clear();
-            inputFilesEditor.setText("No files selected.");
-        };
+    {
+        selectedFiles.clear();
+        inputFilesEditor.setText("No files selected.");
+    };
 
     addAndMakeVisible(outputDirLabel);
     outputDirLabel.setText("Output Folder:", juce::dontSendNotification);
@@ -264,13 +264,13 @@ void BatchProcessComponent::startBatch()
 
     runner = std::make_unique<BatchProcessRunner>();
     runner->onLog = [this](const juce::String& msg) { sendLog(msg); };
-    runner->onProgress = [this](float p) { currentProgress = (double)p; };
+    runner->onProgress = [this](float p) { currentProgress = (double) p; };
     runner->onComplete = [this](int successCount, int total)
-        {
-            sendLog("Done - " + juce::String(successCount) + "/" + juce::String(total) + " file(s) processed successfully.");
-            statusLabel.setText("Complete: " + juce::String(successCount) + "/" + juce::String(total), juce::dontSendNotification);
-            runBtn.setEnabled(true);
-        };
+    {
+        sendLog("Done - " + juce::String(successCount) + "/" + juce::String(total) + " file(s) processed successfully.");
+        statusLabel.setText("Complete: " + juce::String(successCount) + "/" + juce::String(total), juce::dontSendNotification);
+        runBtn.setEnabled(true);
+    };
     runner->start(selectedFiles, outDir, options);
 }
 

@@ -772,88 +772,43 @@ namespace FL
         writeU32(fields.unknown4);
     }
 
-    void AutomationEvent::parse(juce::InputStream& in, size_t size)
+    void AutomationEvent::parse(juce::InputStream& in, size_t /*size*/)
     {
-        // Reset both legacy and new storage
+        juce::HeapBlock<uint8_t> header(20);
+        if (in.read(header.get(), 20) != 20) throw std::runtime_error("Failed to read automation header");
+        uint32_t numPoints;
+        if (in.read(&numPoints, 4) != 4) throw std::runtime_error("Failed to read num points");
+        numPoints = leU32FromBytes(&numPoints);
         points.clear();
-        records.clear();
-
-        // Read the 13-byte header
-        uint8_t header[HEADER_SIZE];
-        if (in.read(header, HEADER_SIZE) != HEADER_SIZE)
-            throw std::runtime_error("Failed to read automation header");
-
-        size_t remaining = size - HEADER_SIZE;
-
-        // Read records (24 bytes each)
-        while (remaining >= POINT_SIZE) {
-            Record rec;
-            uint8_t raw[POINT_SIZE];
-            if (in.read(raw, POINT_SIZE) != POINT_SIZE)
-                throw std::runtime_error("Failed to read automation record");
-
-            rec.controlCode = leU32FromBytes(raw + 0);
-            rec.curveType = leU32FromBytes(raw + 4);
-            rec.position = leDoubleFromBytes(raw + 8);
-            rec.value = leDoubleFromBytes(raw + 16);
-
-            records.push_back(rec);
-            remaining -= POINT_SIZE;
-        }
-
-        // Also populate legacy points for backward compatibility
-        for (const auto& rec : records) {
+        points.reserve(numPoints);
+        for (uint32_t i = 0; i < numPoints; ++i) {
             AutomationPoint p;
-            p.beatIncrement = rec.position;  // Position used as beat increment in legacy
-            p.value = rec.value;
-            p.tension = 0.5f;  // Default tension
-            p.unknown3[0] = 0;
-            p.unknown3[1] = 0;
-            p.unknown3[2] = 0;
-            p.direction = 0;
+            if (in.read(&p.beatIncrement, 8) != 8) throw std::runtime_error("Failed to read beat increment");
+            p.beatIncrement = leDoubleFromBytes(&p.beatIncrement);
+            if (in.read(&p.value, 8) != 8) throw std::runtime_error("Failed to read value");
+            p.value = leDoubleFromBytes(&p.value);
+            if (in.read(&p.tension, 4) != 4) throw std::runtime_error("Failed to read tension");
+            p.tension = leFloatFromBytes(&p.tension);
+            if (in.read(p.unknown3, 3) != 3) throw std::runtime_error("Failed to read unknown3");
+            if (in.read(&p.direction, 1) != 1) throw std::runtime_error("Failed to read direction");
             points.push_back(p);
         }
-    
     }
     void AutomationEvent::writeItems(juce::OutputStream& out) const
     {
-        // Write header (13 bytes)
-        // 01 00 00 00 40 00 00 00 00 04 00 00 00
-        out.writeByte(0x01);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-
-        // Write 0x00000040 as little-endian uint32
-        uint32_t val40 = 0x00000040;
-        uint32_t le40 = juce::ByteOrder::swapIfBigEndian(val40);
-        out.write(&le40, 4);
-
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-
-        // Write 0x00000400 as little-endian uint32
-        uint32_t val400 = 0x00000400;
-        uint32_t le400 = juce::ByteOrder::swapIfBigEndian(val400);
-        out.write(&le400, 4);
-
-        // Write records (24 bytes each)
-        for (const auto& rec : records) {
-            // controlCode (int32) - little-endian
-            uint32_t cc = juce::ByteOrder::swapIfBigEndian((uint32_t)rec.controlCode);
-            out.write(&cc, 4);
-
-            // curveType (int32) - little-endian
-            uint32_t ct = juce::ByteOrder::swapIfBigEndian((uint32_t)rec.curveType);
-            out.write(&ct, 4);
-
-            // position (double) - little-endian
-            writeDoubleLE(out, rec.position);
-
-            // value (double) - little-endian
-            writeDoubleLE(out, rec.value);
+        for (int i = 0; i < 20; ++i) out.writeByte(0);
+        uint32_t num = (uint32_t)points.size();
+        uint32_t le = juce::ByteOrder::swapIfBigEndian(num);
+        out.write(&le, 4);
+        for (const auto& p : points) {
+            double inc = juce::ByteOrder::swapIfBigEndian(p.beatIncrement);
+            out.write(&inc, 8);
+            double val = juce::ByteOrder::swapIfBigEndian(p.value);
+            out.write(&val, 8);
+            float tens = juce::ByteOrder::swapIfBigEndian(p.tension);
+            out.write(&tens, 4);
+            out.write(p.unknown3, 3);
+            out.writeByte(p.direction);
         }
     }
 

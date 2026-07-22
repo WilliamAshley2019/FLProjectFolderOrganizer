@@ -12,32 +12,12 @@ namespace
         auto* autoEv = dynamic_cast<FL::AutomationEvent*>(ev);
         return autoEv ? autoEv->points.size() : 0;
     }
-
-    // Get the curve type of the first automation segment
-    int getCurveType(FL::Channel* ch)
-    {
-        if (ch == nullptr) return 0;
-        auto* ev = ch->getMutableTree().firstEvent(FL::EventID::Automation);
-        auto* autoEv = dynamic_cast<FL::AutomationEvent*>(ev);
-        if (autoEv && autoEv->records.size() > 1)
-            return autoEv->records[1].curveType; // First interior point's curve type
-        return 0;
-    }
-
-    // Check if a channel has automation data
-    bool hasAutomationData(FL::Channel* ch)
-    {
-        if (ch == nullptr) return false;
-        auto* ev = ch->getMutableTree().firstEvent(FL::EventID::Automation);
-        auto* autoEv = dynamic_cast<FL::AutomationEvent*>(ev);
-        return autoEv && !autoEv->records.empty();
-    }
 }
 
 AutomationToolsComponent::AutomationToolsComponent(PluginProcessor& processor)
     : processorRef(processor)
 {
-    setSize(700, 600);
+    setSize(650, 550);
 
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Automation Tools", juce::dontSendNotification);
@@ -49,34 +29,26 @@ AutomationToolsComponent::AutomationToolsComponent(PluginProcessor& processor)
     channelLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
 
     addAndMakeVisible(channelSelector);
-    channelSelector.onChange = [this] { refreshPointInfo(); };
+    channelSelector.onChange = [this]
+    {
+        int idx = channelSelector.getSelectedItemIndex();
+        if (idx < 0 || idx >= channelIidsForSelector.size()) return;
+        int iid = channelIidsForSelector[idx];
+        processorRef.withProjectLock([&](FL::Project* p) -> int
+        {
+            if (p == nullptr) return 0;
+            for (auto* ch : p->getChannels())
+                if (ch->getIID() == iid)
+                    pointCountLabel.setText(juce::String((int) getAutomationPointCount(ch)) + " point(s)", juce::dontSendNotification);
+            return 0;
+        });
+    };
 
     addAndMakeVisible(pointCountLabel);
     pointCountLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
 
-    addAndMakeVisible(curveTypeLabel);
-    curveTypeLabel.setText("Curve Type:", juce::dontSendNotification);
-    curveTypeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-
-    addAndMakeVisible(curveTypeSelector);
-    curveTypeSelector.onChange = [this]
-        {
-            auto curveTypes = getCurveTypeList();
-            int idx = curveTypeSelector.getSelectedItemIndex();
-            if (idx >= 0 && idx < (int)curveTypes.size())
-            {
-                int curveType = curveTypes[idx].first;
-                applyCurveType(curveType);
-            }
-        };
-
-    // Populate curve types
-    auto curveTypes = getCurveTypeList();
-    for (const auto& pair : curveTypes)
-        curveTypeSelector.addItem(pair.second, pair.first + 1);
-
     addAndMakeVisible(factorLabel);
-    factorLabel.setText("Factor / window size / subdivisions:", juce::dontSendNotification);
+    factorLabel.setText("Factor / window size / tolerance (used by the button you press):", juce::dontSendNotification);
     factorLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     factorLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
 
@@ -101,17 +73,6 @@ AutomationToolsComponent::AutomationToolsComponent(PluginProcessor& processor)
     addAndMakeVisible(removeRedundantBtn);
     removeRedundantBtn.setButtonText("Remove Redundant (tolerance)");
     removeRedundantBtn.onClick = [this] { applyRemoveRedundant(); };
-
-    addAndMakeVisible(applyCurveTypeBtn);
-    applyCurveTypeBtn.setButtonText("Apply Curve Type");
-    applyCurveTypeBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF44AAFF));
-    applyCurveTypeBtn.onClick = [this]
-        {
-            auto curveTypes = getCurveTypeList();
-            int idx = curveTypeSelector.getSelectedItemIndex();
-            if (idx >= 0 && idx < (int)curveTypes.size())
-                applyCurveType(curveTypes[idx].first);
-        };
 
     addAndMakeVisible(saveAsBtn);
     saveAsBtn.setButtonText("Save Project As...");
@@ -146,10 +107,7 @@ void AutomationToolsComponent::resized()
     channelSelector.setBounds(chanRow);
     bounds.removeFromTop(6);
 
-    auto infoRow = bounds.removeFromTop(22);
-    pointCountLabel.setBounds(infoRow.removeFromLeft(200));
-    curveTypeLabel.setBounds(infoRow.removeFromLeft(100));
-    curveTypeSelector.setBounds(infoRow);
+    pointCountLabel.setBounds(bounds.removeFromTop(20));
     bounds.removeFromTop(12);
 
     factorLabel.setBounds(bounds.removeFromTop(18));
@@ -166,10 +124,6 @@ void AutomationToolsComponent::resized()
     smoothBtn.setBounds(btnRow2.removeFromLeft(180));
     btnRow2.removeFromLeft(8);
     removeRedundantBtn.setBounds(btnRow2.removeFromLeft(220));
-    bounds.removeFromTop(6);
-
-    auto btnRow3 = bounds.removeFromTop(32);
-    applyCurveTypeBtn.setBounds(btnRow3.removeFromLeft(180));
     bounds.removeFromTop(12);
 
     saveAsBtn.setBounds(bounds.removeFromTop(34).removeFromLeft(180));
@@ -187,58 +141,31 @@ void AutomationToolsComponent::refreshChannelList()
     channelIidsForSelector.clear();
 
     processorRef.withProjectLock([&](FL::Project* p) -> int
+    {
+        if (p == nullptr)
         {
-            if (p == nullptr)
-            {
-                setStatus("No project loaded.");
-                return 0;
-            }
-            int itemId = 1;
-            for (auto* ch : p->getChannels())
-            {
-                if (!hasAutomationData(ch)) continue;
-
-                size_t points = getAutomationPointCount(ch);
-                int curveType = getCurveType(ch);
-                juce::String label = "IID " + juce::String(ch->getIID()) + ": "
-                    + (ch->getName().isNotEmpty() ? ch->getName() : juce::String("(unnamed)"))
-                    + " - " + juce::String((int)points) + " point(s)"
-                    + " - " + getCurveTypeName(curveType);
-                channelSelector.addItem(label, itemId);
-                channelIidsForSelector.add(ch->getIID());
-                ++itemId;
-            }
+            setStatus("No project loaded.");
             return 0;
-        });
+        }
+        int itemId = 1;
+        for (auto* ch : p->getChannels())
+        {
+            size_t points = getAutomationPointCount(ch);
+            if (points == 0) continue; // only list channels that actually have automation data
+            juce::String label = "IID " + juce::String(ch->getIID()) + ": "
+                + (ch->getName().isNotEmpty() ? ch->getName() : juce::String("(unnamed)"))
+                + " - " + juce::String((int) points) + " point(s)";
+            channelSelector.addItem(label, itemId);
+            channelIidsForSelector.add(ch->getIID());
+            ++itemId;
+        }
+        return 0;
+    });
 
     if (channelSelector.getNumItems() == 0)
         channelSelector.setTextWhenNoChoicesAvailable("No channels with automation data found.");
     else
         channelSelector.setSelectedItemIndex(0);
-
-    refreshPointInfo();
-}
-
-void AutomationToolsComponent::refreshPointInfo()
-{
-    int idx = channelSelector.getSelectedItemIndex();
-    if (idx < 0 || idx >= channelIidsForSelector.size()) return;
-    int iid = channelIidsForSelector[idx];
-
-    processorRef.withProjectLock([&](FL::Project* p) -> int
-        {
-            if (p == nullptr) return 0;
-            for (auto* ch : p->getChannels())
-            {
-                if (ch->getIID() != iid) continue;
-                pointCountLabel.setText(juce::String((int)getAutomationPointCount(ch)) + " point(s)", juce::dontSendNotification);
-
-                int curveType = getCurveType(ch);
-                curveTypeSelector.setSelectedId(curveType + 1, juce::dontSendNotification);
-                return 0;
-            }
-            return 0;
-        });
 }
 
 void AutomationToolsComponent::setStatus(const juce::String& msg)
@@ -248,46 +175,8 @@ void AutomationToolsComponent::setStatus(const juce::String& msg)
     logBox.insertTextAtCaret("[" + juce::Time::getCurrentTime().toString(true, true) + "] " + msg + "\n");
 }
 
-juce::String AutomationToolsComponent::getCurveTypeName(int curveType) const
-{
-    switch (curveType) {
-    case 0x00: return "Linear";
-    case 0x01: return "Double Curve (S-curve)";
-    case 0x02: return "Single Curve (Bezier)";
-    case 0x03: return "Stairs";
-    case 0x04: return "Smooth Stairs";
-    case 0x05: return "Half Sine";
-    case 0x06: return "Hold/Pulse";
-    case 0x07: return "Wave (Full Sine)";
-    case 0x08: return "Flat Anchor";
-    case 0x09: return "Single Curve 2";
-    case 0x0A: return "Single Curve 3";
-    case 0x0B: return "Double Curve 2";
-    case 0x0C: return "Double Curve 3";
-    default: return "Unknown (" + juce::String(curveType) + ")";
-    }
-}
-
-std::vector<std::pair<int, juce::String>> AutomationToolsComponent::getCurveTypeList() const
-{
-    return {
-        {0x00, "Linear"},
-        {0x01, "Double Curve (S-curve)"},
-        {0x02, "Single Curve (Bezier)"},
-        {0x03, "Stairs"},
-        {0x04, "Smooth Stairs"},
-        {0x05, "Half Sine"},
-        {0x06, "Hold/Pulse"},
-        {0x07, "Wave (Full Sine)"},
-        {0x08, "Flat Anchor"},
-        {0x09, "Single Curve 2"},
-        {0x0A, "Single Curve 3"},
-        {0x0B, "Double Curve 2"},
-        {0x0C, "Double Curve 3"}
-    };
-}
-
-// Shared plumbing for operations
+// Shared plumbing for the four operations below: find the selected channel,
+// hand its automation points to a modifier, report how many points remain.
 template <typename ModifierFn>
 static void applyToSelected(PluginProcessor& processorRef, juce::ComboBox& channelSelector,
     juce::Array<int>& channelIidsForSelector, ModifierFn&& modifier,
@@ -302,20 +191,20 @@ static void applyToSelected(PluginProcessor& processorRef, juce::ComboBox& chann
     int iid = channelIidsForSelector[idx];
 
     processorRef.withProjectLock([&](FL::Project* p) -> int
+    {
+        if (p == nullptr) { report("No project loaded."); return 0; }
+        for (auto* ch : p->getChannels())
         {
-            if (p == nullptr) { report("No project loaded."); return 0; }
-            for (auto* ch : p->getChannels())
-            {
-                if (ch->getIID() != iid) continue;
-                bool applied = FL::AutomationEditor::applyToChannel(*ch, modifier);
-                report(applied
-                    ? ("Applied. Now " + juce::String((int)getAutomationPointCount(ch)) + " point(s).")
-                    : "This channel has no Automation event to modify.");
-                return 0;
-            }
-            report("Channel not found (project may have been reloaded).");
+            if (ch->getIID() != iid) continue;
+            bool applied = FL::AutomationEditor::applyToChannel(*ch, modifier);
+            report(applied
+                ? ("Applied. Now " + juce::String((int) getAutomationPointCount(ch)) + " point(s).")
+                : "This channel has no Automation event to modify.");
             return 0;
-        });
+        }
+        report("Channel not found (project may have been reloaded).");
+        return 0;
+    });
 }
 
 void AutomationToolsComponent::applyScale()
@@ -352,48 +241,6 @@ void AutomationToolsComponent::applyRemoveRedundant()
         [this, tolerance](const juce::String& msg) { setStatus("Remove redundant (tol " + juce::String(tolerance) + "): " + msg); });
 }
 
-void AutomationToolsComponent::applyCurveType(int curveType)
-{
-    // Apply curve type to the selected channel
-    int idx = channelSelector.getSelectedItemIndex();
-    if (idx < 0 || idx >= channelIidsForSelector.size())
-    {
-        setStatus("Select a channel first.");
-        return;
-    }
-    int iid = channelIidsForSelector[idx];
-
-    processorRef.withProjectLock([&](FL::Project* p) -> int
-        {
-            if (p == nullptr) { setStatus("No project loaded."); return 0; }
-            for (auto* ch : p->getChannels())
-            {
-                if (ch->getIID() != iid) continue;
-
-                auto* ev = ch->getMutableTree().firstEvent(FL::EventID::Automation);
-                auto* autoEv = dynamic_cast<FL::AutomationEvent*>(ev);
-                if (autoEv && !autoEv->records.empty())
-                {
-                    // Apply curve type to all interior points (skip first endpoint)
-                    for (size_t i = 1; i < autoEv->records.size(); ++i)
-                    {
-                        autoEv->records[i].curveType = curveType;
-                    }
-                    setStatus("Applied curve type: " + getCurveTypeName(curveType) +
-                        " to " + juce::String(autoEv->records.size() - 1) + " segment(s).");
-                    refreshPointInfo();
-                }
-                else
-                {
-                    setStatus("No automation data found on this channel.");
-                }
-                return 0;
-            }
-            setStatus("Channel not found.");
-            return 0;
-        });
-}
-
 void AutomationToolsComponent::saveAs()
 {
     saveChooser = std::make_unique<juce::FileChooser>(
@@ -402,16 +249,16 @@ void AutomationToolsComponent::saveAs()
         "*.flp");
 
     constexpr auto flags = juce::FileBrowserComponent::saveMode
-        | juce::FileBrowserComponent::warnAboutOverwriting;
+                          | juce::FileBrowserComponent::warnAboutOverwriting;
 
     saveChooser->launchAsync(flags, [this](const juce::FileChooser& chooser)
-        {
-            auto file = chooser.getResult();
-            if (file == juce::File{}) return;
+    {
+        auto file = chooser.getResult();
+        if (file == juce::File{}) return;
 
-            bool ok = processorRef.saveProjectAs(file);
-            setStatus(ok ? ("Saved to " + file.getFullPathName()) : "Save failed.");
-        });
+        bool ok = processorRef.saveProjectAs(file);
+        setStatus(ok ? ("Saved to " + file.getFullPathName()) : "Save failed.");
+    });
 }
 
 AutomationToolsWindow::AutomationToolsWindow(PluginProcessor& processor)
@@ -419,7 +266,7 @@ AutomationToolsWindow::AutomationToolsWindow(PluginProcessor& processor)
 {
     setUsingNativeTitleBar(true);
     setContentOwned(new AutomationToolsComponent(processor), true);
-    centreWithSize(700, 600);
+    centreWithSize(650, 550);
     setResizable(true, true);
     setVisible(true);
 }

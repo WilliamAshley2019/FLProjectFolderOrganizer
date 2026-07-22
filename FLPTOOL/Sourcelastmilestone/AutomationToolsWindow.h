@@ -6,8 +6,10 @@
 // FL::AutomationEditor operations to it (scale/invert/smooth/remove
 // redundant points), then save the result to a new .flp file.
 //
-// Now includes full curve type support for all 13 automation curve types
-// discovered through reverse-engineering FL Studio 2026.
+// Operates directly on the PluginProcessor's live loaded project via
+// withProjectLock() - changes are held in memory until "Save Project As..."
+// is clicked, matching how AutomationEditor::applyToChannel mutates the
+// EventTree in place rather than returning a copy.
 class AutomationToolsComponent : public juce::Component
 {
 public:
@@ -18,36 +20,26 @@ public:
 
 private:
     void refreshChannelList();
-    void refreshPointInfo();
     void applyScale();
     void applyInvert();
     void applySmooth();
     void applyRemoveRedundant();
-    void applyCurveType(int curveType);
     void saveAs();
     void setStatus(const juce::String& msg);
-    
-    // Get curve type name from value
-    juce::String getCurveTypeName(int curveType) const;
-    // Get all curve types for the dropdown
-    std::vector<std::pair<int, juce::String>> getCurveTypeList() const;
 
     PluginProcessor& processorRef;
 
     juce::Label titleLabel;
     juce::Label channelLabel;
-    juce::ComboBox channelSelector;
-    juce::Array<int> channelIidsForSelector;
+    juce::ComboBox channelSelector; // indexed by channel IID, stored in itemData via getSelectedId()-1 lookup
+    juce::Array<int> channelIidsForSelector; // parallel to combo box item order
 
     juce::Label pointCountLabel;
-    juce::Label curveTypeLabel;
-    juce::ComboBox curveTypeSelector;
 
     juce::Label factorLabel;
-    juce::TextEditor factorEditor;
+    juce::TextEditor factorEditor; // scale factor / smoothing window size / tolerance, reused per-operation
 
     juce::TextButton scaleBtn, invertBtn, smoothBtn, removeRedundantBtn;
-    juce::TextButton applyCurveTypeBtn;
     juce::TextButton saveAsBtn;
     juce::Label statusLabel;
     juce::TextEditor logBox;

@@ -278,22 +278,6 @@ namespace FL
         Automation = 5
     };
 
-    enum class AutomationCurveType : int32_t {
-        Linear = 0x00,
-        DoubleCurve = 0x01,
-        SingleCurve = 0x02,
-        Stairs = 0x03,
-        SmoothStairs = 0x04,
-        HalfSine = 0x05,
-        HoldPulse = 0x06,
-        Wave = 0x07,
-        FlatAnchor = 0x08,
-        SingleCurve2 = 0x09,
-        SingleCurve3 = 0x0A,
-        DoubleCurve2 = 0x0B,
-        DoubleCurve3 = 0x0C
-    };
-
     // =============================================================================
     // 3.  Version helper
     // =============================================================================
@@ -552,8 +536,6 @@ namespace FL
     };
 
     // ---- AutomationEvent (event 234) – automation points ----
-   // ---- AutomationEvent (event 234) – automation points ----
-// Legacy point structure (kept for backward compatibility)
     struct AutomationPoint {
         double beatIncrement; // delta from previous point in beats
         double value;         // raw automation value (0..1 usually)
@@ -569,89 +551,9 @@ namespace FL
         void writeItems(juce::OutputStream& out) const override;
         std::unique_ptr<Event> clone() const override { return std::make_unique<AutomationEvent>(*this); }
 
-        // ============================================================
-        // NEW: Complete 24-byte Record Structure (decoded from FL Studio 2026)
-        // ============================================================
-        struct Record {
-            int32_t controlCode;   // 0x03=endpoint, 0x00=interior, -1=sentinel
-            int32_t curveType;     // 0x00-0x0C (see AutomationCurveType enum)
-            double position;       // PPQ ticks (relative to clip start)
-            double value;          // Normalized 0.0-1.0
-        };
-
-        // Get number of steps/subdivisions
-        int getStepCount() const {
-            if (records.size() < 2) return 0;
-            return (int)records.size() - 1;
-        }
-
-        // Get curve type for a specific segment (0 = first segment)
-        int getCurveTypeForSegment(int segmentIndex) const {
-            if (segmentIndex < 0 || segmentIndex >= (int)records.size() - 1) return 0;
-            return records[segmentIndex + 1].curveType;
-        }
-
-        // Set curve type for a specific segment (0 = first segment)
-        void setCurveTypeForSegment(int segmentIndex, int curveType) {
-            if (segmentIndex < 0 || segmentIndex >= (int)records.size() - 1) return;
-            records[segmentIndex + 1].curveType = curveType;
-        }
-
-        // Set curve type for all interior segments
-        void setCurveTypeForAllSegments(int curveType) {
-            for (size_t i = 1; i < records.size(); ++i) {
-                records[i].curveType = curveType;
-            }
-        }
-
-        // Get human-readable curve type name
-        static juce::String getCurveTypeName(int curveType) {
-            switch (curveType) {
-            case 0x00: return "Linear";
-            case 0x01: return "Double Curve (S-curve)";
-            case 0x02: return "Single Curve (Bezier)";
-            case 0x03: return "Stairs";
-            case 0x04: return "Smooth Stairs";
-            case 0x05: return "Half Sine";
-            case 0x06: return "Hold/Pulse";
-            case 0x07: return "Wave (Full Sine)";
-            case 0x08: return "Flat Anchor";
-            case 0x09: return "Single Curve 2";
-            case 0x0A: return "Single Curve 3";
-            case 0x0B: return "Double Curve 2";
-            case 0x0C: return "Double Curve 3";
-            default: return "Unknown (" + juce::String(curveType) + ")";
-            }
-        }
-
-        // Get all curve type names for UI dropdowns
-        static std::vector<std::pair<int, juce::String>> getCurveTypeList() {
-            return {
-                {0x00, "Linear"},
-                {0x01, "Double Curve (S-curve)"},
-                {0x02, "Single Curve (Bezier)"},
-                {0x03, "Stairs"},
-                {0x04, "Smooth Stairs"},
-                {0x05, "Half Sine"},
-                {0x06, "Hold/Pulse"},
-                {0x07, "Wave (Full Sine)"},
-                {0x08, "Flat Anchor"},
-                {0x09, "Single Curve 2"},
-                {0x0A, "Single Curve 3"},
-                {0x0B, "Double Curve 2"},
-                {0x0C, "Double Curve 3"}
-            };
-        }
-
-        // Legacy points (kept for backward compatibility)
         std::vector<AutomationPoint> points;
-
-        // NEW: Complete records (replaces points for modern FLP files)
-        std::vector<Record> records;
-
     private:
         static constexpr size_t POINT_SIZE = 24; // 8+8+4+3+1
-        static constexpr size_t HEADER_SIZE = 13; // 13-byte header before records
     };
 
     // ---- MixerBlobEvent (event 225) ----
