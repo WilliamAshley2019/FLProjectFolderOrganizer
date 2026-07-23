@@ -20,7 +20,7 @@ determine a way to extract automations in some usable way.
 way more work is needed on refining the automation stuff.
 I am not sure when or if I will work on modifying flp files this way as a "rapid editor" via text ui/gui or batch interface. to batch run changes with the flptoolkit but its plausible.
 
-There are some known issues. 
+There are some known issues. On like day 10  of my water fast now that I intend to continue till the end of the month feeling great, however  I am pretty blah for doing much even though I feel fine. 
 
 
 2026-07-20 after a fast week of doing an extended water / tea fast which is continuing there was some slight progress on the project. Added .json export of some project data. 
