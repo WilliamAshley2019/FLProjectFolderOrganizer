@@ -35,84 +35,100 @@ TO do: figure out how automation clip points work so automation data can be prop
 I thought I might as well start documenting some background info regarding solutions.  Its also important to note that the flp format seems to more or less be stable but versions added features as new functions within fl studio were added. I havn't quite wrapped my head around these, but I think that automations will wwork in the next update. Current assumption is values stride-24 with the value offset 16, not 100% sure on this testing.  Automation Curves arn't quite solved for yet.  I will see if I can find this specific info somewhere online.
 ## FLP Automation Structure? Not sure yet.
 
-```text
-┌────────────────────────────────────────────────────────────────────────────────────┐
-│                               FLP Automation Structure?                            │
-├────────────────────────────────────┬───────────────────────────────────────────────┤
-│ Legacy Automation                  │ Modern Automation Clip                       │
-│ (Pattern-Bound)                    │ (Channel-Based)                              │
-├────────────────────────────────────┼───────────────────────────────────────────────┤
-│ PatternCtrlsEvent                  │ RemoteControllerEvent (227)                 │
-│ Event ID: 223                      │ └── Links automation to target parameter    │
-│                                    │                                             │
-│ Controller[]                       │ AutomationEvent (234)                       │
-│ ├── position                       │ └── AutomationPoint[]                       │
-│ ├── channelIID                     │     ├── beatIncrement                       │
-│ └── value                          │     ├── value                               │
-│                                    │     ├── tension                             │
-│                                    │     └── direction / unknown                 │
-│                                    │                                             │
-│                                    │ PluginSettings (binary blob)                │
-│                                    │ └── Curve type?                             │
-│                                    │                                             │
-│                                    │ ChannelPlaylistItem                         │
-│                                    │ └── Position, Length                        │
-└────────────────────────────────────┴───────────────────────────────────────────────┘
+```text┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           FLP Automation Structure (CONFIRMED)                      │
+├──────────────────────────────────────┬──────────────────────────────────────────────┤
+│ Legacy Automation                    │ Modern Automation Clip                       │
+│ (Pattern-Bound / Pre-FL 12)          │ (Channel-Based / FL 12+)                     │
+├──────────────────────────────────────┼──────────────────────────────────────────────┤
+│ PatternCtrlsEvent                    │ RemoteControllerEvent (EventID: 227)         │
+│ EventID: 223                         │ └── Links automation to target parameter     │
+│                                      │     └── trackId → source automation channel  │
+│ Controller[]                         │     └── destId → target (mixer/plugin param) │
+│ ├── position (uint32)                │     └── paramId → parameter index            │
+│ ├── channelIID (uint8)               │                                              │
+│ └── value (float)                    │ AutomationEvent (EventID: 234)               │
+│                                      │ └── 13-byte header                           │
+│                                      │ └── Record[] (24 bytes each)                 │
+│                                      │                                              │
+│                                      │ ┌──────────────────────────────────────────┐ │
+│                                      │ │          Automation Record               │ │
+│                                      │ ├──────────────┬───────────────────────────┤ │
+│                                      │ │ Offset 0-3   │ controlCode (int32)       │ │
+│                                      │ │              │ 0x03 = endpoint           │ │
+│                                      │ │              │ 0x00 = interior point     │ │
+│                                      │ │              │ -1 = sentinel             │ │
+│                                      │ ├──────────────┼───────────────────────────┤ │
+│                                      │ │ Offset 4-7   │ curveType (int32)         │ │
+│                                      │ │              │ See table below           │ │
+│                                      │ ├──────────────┼───────────────────────────┤ │
+│                                      │ │ Offset 8-15  │ position (double)         │ │
+│                                      │ │              │ PPQ ticks (relative)      │ │
+│                                      │ ├──────────────┼───────────────────────────┤ │
+│                                      │ │ Offset 16-23 │ value (double)            │ │
+│                                      │ │              │ Normalized 0.0-1.0        │ │
+│                                      │ └──────────────┴───────────────────────────┘ │
+│                                      │                                              │
+│                                      │ PluginSettings (binary blob)                 │
+│                                      │ └── (Additional plugin-specific data)        │
+│                                      │                                              │
+│                                      │ ChannelPlaylistItem                          │
+│                                      │ └── Position, Length (in PPQ)                │
+└──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
 
 Best Guesses?  This may not be correct
+## Automation Curve Types
 
-Offset  | Size | Type    | Description
---------|------|---------|----------------------------
-0       | 4    | int32   | Unknown (flags/type?)
-4       | 4    | int32   | Position or beat increment?
-8       | 8    | double  | Position (PPQ ticks)
-16      | 8    | double  | Value (normalized 0.0-1.0)
+| Value | Curve Type | Description |
+|------:|------------|-------------|
+| `0x00` | Linear | Straight line between points |
+| `0x01` | Double Curve | S-curve (ease-in-out) |
+| `0x02` | Single Curve | Bézier curve with tension |
+| `0x03` | Stairs | Step/quantized curve |
+| `0x04` | Smooth Stairs | Smoothed step curve |
+| `0x05` | Half Sine | Half sine wave |
+| `0x06` | Hold / Pulse | Sample-and-hold / pulse wave |
+| `0x07` | Wave | Full sine wave |
+| `0x08` | Flat Anchor | Endpoint marker |
+| `0x09` | Single Curve 2 | Alternate single-curve variant |
+| `0x0A` | Single Curve 3 | Alternate single-curve variant |
+| `0x0B` | Double Curve 2 | Alternate double-curve variant |
+| `0x0C` | Double Curve 3 | Alternate double-curve variant |
 
-The Header (13 bytes)??
+## Control Code Values
 
-Record Structure (24 bytes = stride-24)
-Each record has at least:
+| Value | Meaning | Position in Curve |
+|------:|---------|-------------------|
+| `0x00000003` (`3`) | Endpoint | First point in the automation clip |
+| `0x00000000` (`0`) | Interior Point | Middle points (curve segments begin here) |
+| `0xFFFFFFFF` (`-1`) | Sentinel | End-of-data marker |
 
-A position/beat value at offset 0-7 (as double or int32)
+## Interpolation Formula Reference
 
-An unknown field at offset 8-15
+| Curve Type | Interpolation |
+|------------|---------------|
+| Linear (`0x00`) | `v = a + (b - a) * t` |
+| Single Curve (`0x02`) | `v = smoothstep(a, b, t)` |
+| Double Curve (`0x01`) | `v = easeInOut(a, b, t)` |
+| Stairs (`0x03`) | `v = (t < 0.5) ? a : b` |
+| Smooth Stairs (`0x04`) | `v = smoothstep(a, b, t * t * (3 - 2 * t))` |
+| Half Sine (`0x05`) | `v = a + (b - a) * sin(t * π / 2)` |
+| Hold (`0x06`) | `v = (t < 0.99) ? a : b` |
+| Wave (`0x07`) | `v = a + (b - a) * (sin(t * 2 * π - π / 2) * 0.5 + 0.5)` |
+| Flat Anchor (`0x08`) | Endpoint marker (no interpolation) |
+| Variants (`0x09`–`0x0C`) | Same as their base curve types with slight variations |
 
-A value at offset 16-23 (double, normalized 0.0-1.0)
+Binary Compatibility: Delphi's record layout and packing rules influenced how FL Studio serializes data to disk. 
+24-byte automation Delphi's packed record behavior.
 
-Curve Type (Unknown1) Values:
-Value	Likely Curve Type
-0x00	Linear (no curve)
-0x01	Single Curve
-0x02	Double Curve (S-curve)
-0x08	Something special (endpoint marker)
-Control/Position (Unknown0) Values:
-Value	Meaning
-0x00	Interior point
-0x03	Start/end marker?
--1 (0xFFFFFFFF)	Something else (maybe a sentinel)
-1. Single Curve → Bezier with tension
-2. Double Curve → S-curve (ease-in-out) 
-3. Hold → Step (no interpolation)
-4. Stairs → Quantized steps
-5. Smooth → Cubic spline
+Double Precision: Delphi's Double type (8 bytes, IEEE 754), double at offset 8 and 16.
+Type-length-value encoded events and structs
 
-Not 100% sure about this but this is the best guess right now.
-
-struct AutomationClipRecord {
-    int32_t  controlCode;   // 0 = interior, 3 = endpoint, -1 = sentinel
-    int32_t  curveType;     // 0 = linear, 1 = single, 2 = double, 8 = endpoint
-    double   position;      // PPQ ticks (relative to clip start)
-    double   value;         // Normalized 0.0-1.0
-};
- 
-
-enum class AutomationCurveType : int32_t {
-    Linear = 0,        // Straight line between points
-    SingleCurve = 1,   // Bezier with tension
-    DoubleCurve = 2,   // S-curve (ease-in-out)
-
-    I could try to test the code by making a drawing in fl studio save the flp with a given curve and testing against the code to see if it returns true.
+event stream - list of {type, data} pairs similar to MIDI files.
+Events are sequential (no random access)
+New features = new event types.
+Old events ? ignored?
 
 
 2026-07-12 started to resolve the plugin detection code to attempt to read fl native plugins correct etc. Part of that bug was that internal engine plugins such as TS404 and drumsynth may have not been in the same type of wrapper so they were detecting as unknown. FL format has been considered as a way of detecting fruity plugins rather than using more indirect methods such as using plugin names themselves, this can cross index plugin database information to get a correct idea of what plugins are.   More needs to be done but should hopefully be in place by the next major update to the source. Started to work on midi extraction.  Also started trying to merge the FLProjectOrganizer and FLPTOOLKIT into a common codebase that can use the code from the other in hopes of making FLPtoolkit an extension of FLProjectOrganizer.  Big success in this one is getting the UI to work and successfully export detected midi patterns as .mid. Not entirely sure how working it is yet though.
