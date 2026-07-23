@@ -6,7 +6,7 @@ This project is independent and is not affiliated with Image-Line / FL Studio. T
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
 
-2026-07-22 - Minor update automatoins are now sort of detecting in the automation tool WARNING, the tool still isn't optimized, I need to figure out exactly what I would like it to do. I will likely like to draw the automation so people can see what they are doing to it. 
+2026-07-22 - Minor update automatoins are now sort of detecting in the automation tool WARNING, the tool still isn't optimized, I need to figure out exactly what I would like it to do. I will likely like to draw the automation so people can see what they are doing to it. Note there is likely more to automations than what has been solved for however I think I might have the automation types detected so specific automation event type and structure can be done, I havn't correlated the actual automation event /  clip to type match the actual form of the shape yet, this is something I'd like to do just to know I've got it right.
 
 NOTE: NO WRITE FUNCTIONS HAVE BEEN TESTED AT ALL YET. DO NOT USE AN ORIGINAL FLP TO MODIFY AUTOMATIONS UNLESS YOU ARE WILLING TO CORRUPT THAT FILE, AS I DON"T KNOW WHAT TYPE OF ANTIFILE CORRUPTION STUFF FLP files have written into them.
 
