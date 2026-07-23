@@ -10,7 +10,7 @@ namespace
         if (ch == nullptr) return 0;
         auto* ev = ch->getMutableTree().firstEvent(FL::EventID::Automation);
         auto* autoEv = dynamic_cast<FL::AutomationEvent*>(ev);
-        return autoEv ? autoEv->records.size() : 0;
+        return autoEv ? autoEv->points.size() : 0;
     }
 
     // Get the curve type of the first automation segment
@@ -37,9 +37,7 @@ namespace
 AutomationToolsComponent::AutomationToolsComponent(PluginProcessor& processor)
     : processorRef(processor)
 {
-    setSize(700, 760);
-
-    addAndMakeVisible(curveView);
+    setSize(700, 600);
 
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Automation Tools", juce::dontSendNotification);
@@ -152,9 +150,6 @@ void AutomationToolsComponent::resized()
     pointCountLabel.setBounds(infoRow.removeFromLeft(200));
     curveTypeLabel.setBounds(infoRow.removeFromLeft(100));
     curveTypeSelector.setBounds(infoRow);
-    bounds.removeFromTop(10);
-
-    curveView.setBounds(bounds.removeFromTop(160));
     bounds.removeFromTop(12);
 
     factorLabel.setBounds(bounds.removeFromTop(18));
@@ -227,7 +222,7 @@ void AutomationToolsComponent::refreshChannelList()
 void AutomationToolsComponent::refreshPointInfo()
 {
     int idx = channelSelector.getSelectedItemIndex();
-    if (idx < 0 || idx >= channelIidsForSelector.size()) { curveView.clear(); return; }
+    if (idx < 0 || idx >= channelIidsForSelector.size()) return;
     int iid = channelIidsForSelector[idx];
 
     processorRef.withProjectLock([&](FL::Project* p) -> int
@@ -242,32 +237,6 @@ void AutomationToolsComponent::refreshPointInfo()
                 curveTypeSelector.setSelectedId(curveType + 1, juce::dontSendNotification);
                 return 0;
             }
-            return 0;
-        });
-
-    refreshCurveView();
-}
-
-void AutomationToolsComponent::refreshCurveView()
-{
-    int idx = channelSelector.getSelectedItemIndex();
-    if (idx < 0 || idx >= channelIidsForSelector.size()) { curveView.clear(); return; }
-    int iid = channelIidsForSelector[idx];
-
-    processorRef.withProjectLock([&](FL::Project* p) -> int
-        {
-            if (p == nullptr) { curveView.clear(); return 0; }
-            for (auto* ch : p->getChannels())
-            {
-                if (ch->getIID() != iid) continue;
-                auto* ev = ch->getMutableTree().firstEvent(FL::EventID::Automation);
-                if (auto* autoEv = dynamic_cast<FL::AutomationEvent*>(ev))
-                    curveView.setPoints(autoEv->records);
-                else
-                    curveView.clear();
-                return 0;
-            }
-            curveView.clear();
             return 0;
         });
 }
@@ -354,15 +323,15 @@ void AutomationToolsComponent::applyScale()
     double factor = factorEditor.getText().getDoubleValue();
     if (factor <= 0.0) { setStatus("Enter a positive scale factor first."); return; }
     applyToSelected(processorRef, channelSelector, channelIidsForSelector,
-        [factor](std::vector<FL::AutomationEvent::Record>& pts) { FL::AutomationEditor::scalePoints(pts, factor); },
-        [this](const juce::String& msg) { setStatus("Scale x" + factorEditor.getText() + ": " + msg); refreshPointInfo(); });
+        [factor](std::vector<FL::AutomationPoint>& pts) { FL::AutomationEditor::scalePoints(pts, factor); },
+        [this](const juce::String& msg) { setStatus("Scale x" + factorEditor.getText() + ": " + msg); });
 }
 
 void AutomationToolsComponent::applyInvert()
 {
     applyToSelected(processorRef, channelSelector, channelIidsForSelector,
-        [](std::vector<FL::AutomationEvent::Record>& pts) { FL::AutomationEditor::invertPoints(pts); },
-        [this](const juce::String& msg) { setStatus("Invert: " + msg); refreshPointInfo(); });
+        [](std::vector<FL::AutomationPoint>& pts) { FL::AutomationEditor::invertPoints(pts); },
+        [this](const juce::String& msg) { setStatus("Invert: " + msg); });
 }
 
 void AutomationToolsComponent::applySmooth()
@@ -370,8 +339,8 @@ void AutomationToolsComponent::applySmooth()
     int window = factorEditor.getText().getIntValue();
     if (window < 2) { setStatus("Enter a window size of at least 2 first."); return; }
     applyToSelected(processorRef, channelSelector, channelIidsForSelector,
-        [window](std::vector<FL::AutomationEvent::Record>& pts) { FL::AutomationEditor::smoothPoints(pts, window); },
-        [this, window](const juce::String& msg) { setStatus("Smooth (window " + juce::String(window) + "): " + msg); refreshPointInfo(); });
+        [window](std::vector<FL::AutomationPoint>& pts) { FL::AutomationEditor::smoothPoints(pts, window); },
+        [this, window](const juce::String& msg) { setStatus("Smooth (window " + juce::String(window) + "): " + msg); });
 }
 
 void AutomationToolsComponent::applyRemoveRedundant()
@@ -379,8 +348,8 @@ void AutomationToolsComponent::applyRemoveRedundant()
     double tolerance = factorEditor.getText().getDoubleValue();
     if (tolerance <= 0.0) tolerance = 0.001;
     applyToSelected(processorRef, channelSelector, channelIidsForSelector,
-        [tolerance](std::vector<FL::AutomationEvent::Record>& pts) { FL::AutomationEditor::removeRedundantPoints(pts, tolerance); },
-        [this, tolerance](const juce::String& msg) { setStatus("Remove redundant (tol " + juce::String(tolerance) + "): " + msg); refreshPointInfo(); });
+        [tolerance](std::vector<FL::AutomationPoint>& pts) { FL::AutomationEditor::removeRedundantPoints(pts, tolerance); },
+        [this, tolerance](const juce::String& msg) { setStatus("Remove redundant (tol " + juce::String(tolerance) + "): " + msg); });
 }
 
 void AutomationToolsComponent::applyCurveType(int curveType)
@@ -450,7 +419,7 @@ AutomationToolsWindow::AutomationToolsWindow(PluginProcessor& processor)
 {
     setUsingNativeTitleBar(true);
     setContentOwned(new AutomationToolsComponent(processor), true);
-    centreWithSize(700, 760);
+    centreWithSize(700, 600);
     setResizable(true, true);
     setVisible(true);
 }

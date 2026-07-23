@@ -505,9 +505,9 @@ namespace FL
     // =========================================================================
     // 8. Automation Editor
     // =========================================================================
-    void AutomationEditor::scalePoints(std::vector<AutomationEvent::Record>& points, double factor) { for (auto& p : points) p.value *= factor; }
-    void AutomationEditor::invertPoints(std::vector<AutomationEvent::Record>& points, double maxValue) { for (auto& p : points) p.value = maxValue - p.value; }
-    void AutomationEditor::smoothPoints(std::vector<AutomationEvent::Record>& points, int windowSize) {
+    void AutomationEditor::scalePoints(std::vector<AutomationPoint>& points, double factor) { for (auto& p : points) p.value *= factor; }
+    void AutomationEditor::invertPoints(std::vector<AutomationPoint>& points, double maxValue) { for (auto& p : points) p.value = maxValue - p.value; }
+    void AutomationEditor::smoothPoints(std::vector<AutomationPoint>& points, int windowSize) {
         if (points.size() < 3 || windowSize < 2) return;
         std::vector<double> originalValues; originalValues.reserve(points.size());
         for (const auto& p : points) originalValues.push_back(p.value);
@@ -521,44 +521,43 @@ namespace FL
             points[i].value = sum / count;
         }
     }
-    int AutomationEditor::removeRedundantPoints(std::vector<AutomationEvent::Record>& points, double tolerance) {
-        // Record::position is already absolute PPQ ticks, so this is a
-        // straightforward linear-interpolation-error check against
-        // neighbours - no delta-time reconstruction needed (unlike the old
-        // AutomationPoint::beatIncrement version this replaced).
+    int AutomationEditor::removeRedundantPoints(std::vector<AutomationPoint>& points, double tolerance) {
         if (points.size() < 3) return 0;
+        std::vector<double> absTimes(points.size()); absTimes[0] = 0.0;
+        for (size_t i = 1; i < points.size(); ++i) absTimes[i] = absTimes[i - 1] + points[i].beatIncrement;
         std::vector<size_t> keepIndices; keepIndices.push_back(0); int removedCount = 0;
         for (size_t i = 1; i < points.size() - 1; ++i) {
-            double t_range = points[i + 1].position - points[i - 1].position;
+            double t_range = absTimes[i + 1] - absTimes[i - 1];
             double linearVal = points[i - 1].value;
-            if (t_range > 0.0) linearVal += ((points[i].position - points[i - 1].position) / t_range) * (points[i + 1].value - points[i - 1].value);
+            if (t_range > 0.0) linearVal += ((absTimes[i] - absTimes[i - 1]) / t_range) * (points[i + 1].value - points[i - 1].value);
             if (std::abs(points[i].value - linearVal) < tolerance) removedCount++;
             else keepIndices.push_back(i);
         }
         keepIndices.push_back(points.size() - 1);
-        std::vector<AutomationEvent::Record> newPoints; newPoints.reserve(keepIndices.size());
-        for (size_t k = 0; k < keepIndices.size(); ++k)
-            newPoints.push_back(points[keepIndices[k]]);
+        std::vector<AutomationPoint> newPoints; newPoints.reserve(keepIndices.size());
+        for (size_t k = 0; k < keepIndices.size(); ++k) {
+            size_t origIdx = keepIndices[k]; AutomationPoint p = points[origIdx];
+            if (k > 0) {
+                double delta = 0.0;
+                for (size_t j = keepIndices[k - 1] + 1; j <= origIdx; ++j) delta += points[j].beatIncrement;
+                p.beatIncrement = delta;
+            }
+            newPoints.push_back(p);
+        }
         points.swap(newPoints); return removedCount;
     }
-    bool AutomationEditor::applyToChannel(Channel& channel, std::function<void(std::vector<AutomationEvent::Record>&)> modifier) {
+    bool AutomationEditor::applyToChannel(Channel& channel, std::function<void(std::vector<AutomationPoint>&)> modifier) {
         EventTree& tree = channel.getMutableTree();
         Event* ev = tree.firstEvent(EventID::Automation); if (!ev) return false;
         auto* autoEv = dynamic_cast<AutomationEvent*>(ev); if (!autoEv) return false;
-        modifier(autoEv->records); return true;
+        modifier(autoEv->points); return true;
     }
-    std::vector<AutomationEvent::Record> AutomationEditor::generateFadeCurve(double startValue, double endValue, double totalBeats, int numPoints, int curveType) {
-        std::vector<AutomationEvent::Record> points; if (numPoints < 2) return points;
-        points.reserve(numPoints);
-        double posDelta = totalBeats / (numPoints - 1);
-        double valueDelta = (endValue - startValue) / (numPoints - 1);
+    std::vector<AutomationPoint> AutomationEditor::generateFadeCurve(double startValue, double endValue, double totalBeats, int numPoints) {
+        std::vector<AutomationPoint> points; if (numPoints < 2) return points;
+        points.reserve(numPoints); double beatDelta = totalBeats / (numPoints - 1); double valueDelta = (endValue - startValue) / (numPoints - 1);
         for (int i = 0; i < numPoints; ++i) {
-            AutomationEvent::Record p{};
-            p.controlCode = (i == 0 || i == numPoints - 1) ? 0x03 : 0x00;
-            p.curveType = (i == 0) ? 0 : curveType; // first record's curveType is unused (nothing leads into it)
-            p.position = posDelta * i;
-            p.value = startValue + (valueDelta * i);
-            points.push_back(p);
+            AutomationPoint p{}; p.beatIncrement = (i == 0) ? 0.0 : beatDelta; p.value = startValue + (valueDelta * i);
+            p.tension = 0.5f; p.direction = 0; std::memset(p.unknown3, 0, sizeof(p.unknown3)); points.push_back(p);
         }
         return points;
     }

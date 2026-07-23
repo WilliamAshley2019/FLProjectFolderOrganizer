@@ -196,23 +196,14 @@ namespace FL
     // =========================================================================
     // 8. Automation Curve Editor
     // =========================================================================
-    // IMPORTANT: operates on AutomationEvent::Record (position/value/curveType),
-    // NOT the legacy AutomationPoint list. AutomationEvent::writeItems() only
-    // ever serializes `records` back to disk - `points` is a read-only
-    // backward-compat snapshot populated once at parse time and never written
-    // back. Editing `points` (as this class used to) is a silent no-op: the
-    // UI shows the edit applied, but Save Project As writes the untouched
-    // original data. Record::position is an absolute PPQ tick (not a delta
-    // like AutomationPoint::beatIncrement), which also makes redundant-point
-    // removal simpler - no running-sum reconstruction needed.
     class AutomationEditor {
     public:
-        static void scalePoints(std::vector<AutomationEvent::Record>& points, double factor);
-        static void invertPoints(std::vector<AutomationEvent::Record>& points, double maxValue = 1.0);
-        static void smoothPoints(std::vector<AutomationEvent::Record>& points, int windowSize = 3);
-        static int removeRedundantPoints(std::vector<AutomationEvent::Record>& points, double tolerance = 0.001);
-        static bool applyToChannel(Channel& channel, std::function<void(std::vector<AutomationEvent::Record>&)> modifier);
-        static std::vector<AutomationEvent::Record> generateFadeCurve(double startValue, double endValue, double totalBeats, int numPoints, int curveType = 0);
+        static void scalePoints(std::vector<AutomationPoint>& points, double factor);
+        static void invertPoints(std::vector<AutomationPoint>& points, double maxValue = 1.0);
+        static void smoothPoints(std::vector<AutomationPoint>& points, int windowSize = 3);
+        static int removeRedundantPoints(std::vector<AutomationPoint>& points, double tolerance = 0.001);
+        static bool applyToChannel(Channel& channel, std::function<void(std::vector<AutomationPoint>&)> modifier);
+        static std::vector<AutomationPoint> generateFadeCurve(double startValue, double endValue, double totalBeats, int numPoints);
     };
 
     // =========================================================================

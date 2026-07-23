@@ -1,7 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
-#include "AutomationCurveView.h"
 
 // Lets the user pick a channel with automation data and apply
 // FL::AutomationEditor operations to it (scale/invert/smooth/remove
@@ -20,7 +19,6 @@ public:
 private:
     void refreshChannelList();
     void refreshPointInfo();
-    void refreshCurveView();
     void applyScale();
     void applyInvert();
     void applySmooth();
@@ -44,8 +42,6 @@ private:
     juce::Label pointCountLabel;
     juce::Label curveTypeLabel;
     juce::ComboBox curveTypeSelector;
-
-    AutomationCurveView curveView;
 
     juce::Label factorLabel;
     juce::TextEditor factorEditor;
