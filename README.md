@@ -22,17 +22,6 @@ I am not sure when or if I will work on modifying flp files this way as a "rapid
 
 There are some known issues. On like day 10  of my water fast now that I intend to continue till the end of the month feeling great, however  I am pretty blah for doing much even though I feel fine. 
 
-
-2026-07-20 after a fast week of doing an extended water / tea fast which is continuing there was some slight progress on the project. Added .json export of some project data. 
-Some of the plugin and sample stuff is working a little better to include audio clips however its still not 100% I will likely need to cross link the plugin database because I am detecting
-the plugin "title" rather than the plugin type for some synth instruments. This will likely be ironed out with fairly simple cross linking of data not 100% sure the structure yet likely
-Plugin -> preset/title. The audio clips were a little weird likely cause they were added into fl studio later and have a particular strucutre that exists in a special way between channel
-rack and playlist.  A bunch of other things will update in more detail likely. https://github.com/WilliamAshley2019/FLProjectFolderOrganizer/tree/main/FLPTOOL
-I have a sense there is so much stuff that could be going on in a flp that it will not be a quick victory to get everything detecting and working properly however some basic key functions seem to be working now. 
-
-TO do: figure out how automation clip points work so automation data can be properly extracted. Automation events and automation clips have evolved so wrapping my head around how the data is housed in the flp will need a little attention. Adding links to more useful tools https://github.com/monadgroup/FLParser
-
-I thought I might as well start documenting some background info regarding solutions.  Its also important to note that the flp format seems to more or less be stable but versions added features as new functions within fl studio were added. I havn't quite wrapped my head around these, but I think that automations will wwork in the next update. Current assumption is values stride-24 with the value offset 16, not 100% sure on this testing.  Automation Curves arn't quite solved for yet.  I will see if I can find this specific info somewhere online.
 ## FLP Automation Structure? Not sure yet.
 
 ```text┌─────────────────────────────────────────────────────────────────────────────────────┐
@@ -130,6 +119,19 @@ Events are sequential (no random access)
 New features = new event types.
 Old events ? ignored?
 
+
+None of this is known as I don't know what the actual internal structures are inside FL Studio, this is all "guesswork" however it is sort of starting to detect there are likely still tons of bugs and untapped information in there to accurately render the automations, its time intensive to do this so this project will likely move slow
+
+2026-07-20 after a fast week of doing an extended water / tea fast which is continuing there was some slight progress on the project. Added .json export of some project data. 
+Some of the plugin and sample stuff is working a little better to include audio clips however its still not 100% I will likely need to cross link the plugin database because I am detecting
+the plugin "title" rather than the plugin type for some synth instruments. This will likely be ironed out with fairly simple cross linking of data not 100% sure the structure yet likely
+Plugin -> preset/title. The audio clips were a little weird likely cause they were added into fl studio later and have a particular strucutre that exists in a special way between channel
+rack and playlist.  A bunch of other things will update in more detail likely. https://github.com/WilliamAshley2019/FLProjectFolderOrganizer/tree/main/FLPTOOL
+I have a sense there is so much stuff that could be going on in a flp that it will not be a quick victory to get everything detecting and working properly however some basic key functions seem to be working now. 
+
+TO do: figure out how automation clip points work so automation data can be properly extracted. Automation events and automation clips have evolved so wrapping my head around how the data is housed in the flp will need a little attention. Adding links to more useful tools https://github.com/monadgroup/FLParser
+
+I thought I might as well start documenting some background info regarding solutions.  Its also important to note that the flp format seems to more or less be stable but versions added features as new functions within fl studio were added. I havn't quite wrapped my head around these, but I think that automations will wwork in the next update. Current assumption is values stride-24 with the value offset 16, not 100% sure on this testing.  Automation Curves arn't quite solved for yet.  I will see if I can find this specific info somewhere online.
 
 2026-07-12 started to resolve the plugin detection code to attempt to read fl native plugins correct etc. Part of that bug was that internal engine plugins such as TS404 and drumsynth may have not been in the same type of wrapper so they were detecting as unknown. FL format has been considered as a way of detecting fruity plugins rather than using more indirect methods such as using plugin names themselves, this can cross index plugin database information to get a correct idea of what plugins are.   More needs to be done but should hopefully be in place by the next major update to the source. Started to work on midi extraction.  Also started trying to merge the FLProjectOrganizer and FLPTOOLKIT into a common codebase that can use the code from the other in hopes of making FLPtoolkit an extension of FLProjectOrganizer.  Big success in this one is getting the UI to work and successfully export detected midi patterns as .mid. Not entirely sure how working it is yet though.
 
