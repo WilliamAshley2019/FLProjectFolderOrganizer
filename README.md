@@ -6,6 +6,15 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 
 TO DO 
 1. I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
+
+   What is left is likely simple math for min / max steps determining total steps at each tension then correlating the tension ratio to step ratio.
+   Pulse at tension 0.0 (center)  
+
+Pulse at tension 1.0 (maximum)  
+
+Pulse at tension -1.0 (minimum) 
+
+Same for Stairs and Wave
 ```text┌─────────────────────────────────────────────────────────────────────────────────────┐
 0x00	Single Curve	Controls curve steepness
 0x01	Double Curve	Controls S-curve asymmetry
