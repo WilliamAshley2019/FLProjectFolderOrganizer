@@ -41,7 +41,7 @@ Skew	float	0.0-1.0	0.0f	1.0f
 Pulse Width	float	0.0-1.0	0.0f	1.0f
 AMNT	float	-1.0 to 1.0	0.0f	1.0f	Amplitude of LFO?
 
-Values 0x00 0x00  to 0x80 0x3F  0% to 100%
+Values 0x00 0x00  to 0x80 0x3F  0% to 100% ??
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
 3.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
