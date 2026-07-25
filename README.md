@@ -9,6 +9,16 @@ TO DO
 2.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
 
    What is left is likely simple math for min / max steps determining total steps at each tension then correlating the tension ratio to step ratio. It appears to be a  audio frequency/parameter scaling similar to  exponential logarithmic behavior common to a lot of audio dials where small changes near one end produce large effects so thing small changes early when you turn the volume knob but large changes the more you turn the knob (almost reverse concept but you get the point more effect the more the knob turns) more precision near the start of the curve more points as the knob turns less and less.  Something like steps = A * exp(-B * (tension_percent - 100)) + C
+  // Convert tension percent (0-100) to a 0-1 range, but reversed
+// Lower tension = more steps
+normalized = 1.0 - (tension_percent / 100.0)
+
+// Apply exponential scaling
+steps = round(2.0 * exp(normalized * 4.5)) 
+
+
+This isn't fully tested yet but I think it will be something very close to this atleast for stairs, I'm not going sit and count steps with a magnifine glass.
+   
    Pulse at tension 0.0 (center)  
 
 Pulse at tension 1.0 (maximum)  
