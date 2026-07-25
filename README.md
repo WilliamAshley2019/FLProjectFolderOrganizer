@@ -1,10 +1,20 @@
-
-
-
 This project is independent and is not affiliated with Image-Line / FL Studio. This project aims to provide a tool to help manage external elements such as samples, plugins and .flp files for project management for organization and analysis, extraction, logging and tracking or other workflows not currently user accessible or expedient within FL Studio AFAIK. If you have issues with this project contact me directly at contact@williamashley.music do not contact ImageLine if you experience issues with this project it is not affiliate with them. 
 
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
+2026-07-25 - the project continues hopefully an update correct some errors in automation data assumptions, may have it understood now.  Need to test.
+
+How automation point data "might work"
+Start (slot 0) + point 1's own position (always 0) and value. No incoming curve.
+Every point P after that has its position/value stored in slot (P−1)'s last 16 bytes
+Its tension/curve-type stored in slot P's first 8 bytes — one slot later. (Regressive mapping (makes sense to plot a line since the last point is not forward directing)
+It overlaps the 24 bytes.
+End point tension/curve-type lands in one extra trailing slot but the position/value fields are unused (NaN) 
+
+The parser and automation app need to be updated to hopefully get the lines to draw properly. 
+I am guessing there is still something between automation events and the actual automation clips that is not accounted for I don't know what it is yet.
+
+How steps within a curve work not 100% sure where that data can be parsed I know it is there I'm just not sure where yet. So I think I am very close to understanding automation clips now.
 
 2026-07-22 - Minor update automatoins are now sort of detecting in the automation tool WARNING, the tool still isn't optimized, I need to figure out exactly what I would like it to do. I will likely like to draw the automation so people can see what they are doing to it. Note there is likely more to automations than what has been solved for however I think I might have the automation types detected so specific automation event type and structure can be done, I havn't correlated the actual automation event /  clip to type match the actual form of the shape yet, this is something I'd like to do just to know I've got it right.
 
