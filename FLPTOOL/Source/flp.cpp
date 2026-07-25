@@ -1,4 +1,6 @@
 #include "flp.h"
+#include <cmath>
+#include <cstring>
 
 namespace FL
 {
@@ -577,7 +579,13 @@ namespace FL
 
     int PlaylistEvent::detectItemSize(const uint8_t* data, size_t totalSize, int offset)
     {
-        const int candidates[] = { 32, 60, 64, 80, 320 };
+        // 88 confirmed against two real FL 26.1.0.5530 project files - without
+        // it, detectItemSize returns 0 for those files and PlaylistEvent::parse
+        // silently produces zero items (see the itemSize==0 early-return
+        // below), so any project made in that FL build reports an empty
+        // arrangement/playlist even though PlaylistItem data is present and
+        // decodes cleanly at itemSize=88.
+        const int candidates[] = { 32, 60, 64, 80, 88, 320 };
         for (int cand : candidates) {
             if (totalSize % cand != 0) continue;
             int n = totalSize / cand;
@@ -777,84 +785,198 @@ namespace FL
         // Reset both legacy and new storage
         points.clear();
         records.clear();
+        trailingData.setSize(0);
+        headerBytes.setSize(0);
+        startMarkerBytes.setSize(0);
 
-        // Read the 13-byte header
+        // Read the 13-byte header verbatim - see the comment on
+        // AutomationEvent::headerBytes for why we don't discard this.
         uint8_t header[HEADER_SIZE];
         if (in.read(header, HEADER_SIZE) != HEADER_SIZE)
             throw std::runtime_error("Failed to read automation header");
+        headerBytes.append(header, HEADER_SIZE);
 
         size_t remaining = size - HEADER_SIZE;
 
-        // Read records (24 bytes each)
-        while (remaining >= POINT_SIZE) {
-            Record rec;
-            uint8_t raw[POINT_SIZE];
-            if (in.read(raw, POINT_SIZE) != POINT_SIZE)
-                throw std::runtime_error("Failed to read automation record");
-
-            rec.controlCode = leU32FromBytes(raw + 0);
-            rec.curveType = leU32FromBytes(raw + 4);
-            rec.position = leDoubleFromBytes(raw + 8);
-            rec.value = leDoubleFromBytes(raw + 16);
-
-            records.push_back(rec);
-            remaining -= POINT_SIZE;
+        juce::MemoryBlock region;
+        if (remaining > 0)
+        {
+            region.setSize(remaining);
+            if (in.read(region.getData(), (int)remaining) != (int)remaining)
+                throw std::runtime_error("Failed to read automation record region");
         }
+        const uint8_t* data = (const uint8_t*)region.getData();
+        size_t numSlots = remaining / POINT_SIZE;
+
+        // PASS 1 - read position/value from every slot until one comes back
+        // non-finite. That slot's index P is both the real point count
+        // (slots 0..P-1 hold points 1..P) AND the index of the extra
+        // "overflow" slot that holds the LAST point's tension/curveType
+        // (see the long comment on Record - each slot's tension/curveType
+        // bytes belong to the point one slot earlier than its own
+        // position/value bytes, so the final point always needs one more
+        // slot than its position/value alone would suggest).
+        std::vector<double> slotPos, slotVal;
+        size_t P = 0;
+        for (; P < numSlots; ++P)
+        {
+            const uint8_t* raw = data + P * POINT_SIZE;
+            double pos = leDoubleFromBytes(raw + 8);
+            double val = leDoubleFromBytes(raw + 16);
+            if (!std::isfinite(pos) || !std::isfinite(val))
+                break;
+            slotPos.push_back(pos);
+            slotVal.push_back(val);
+        }
+        // P is now the real point count; slot P (if present) is the
+        // overflow slot holding point P's tension/curveType.
+
+        if (P == 0)
+        {
+            // Nothing decodable - preserve everything verbatim rather than
+            // guess, so a round-trip at least doesn't corrupt the file.
+            if (remaining > 0)
+                trailingData.append(data, remaining);
+            return;
+        }
+
+        // Slot 0's bytes 0-7 are the opaque start marker, not tension data
+        // for a real point - preserve verbatim (see startMarkerBytes).
+        startMarkerBytes.append(data, 8);
+
+        records.resize(P);
+        for (size_t k = 0; k < P; ++k)
+        {
+            records[k].position = slotPos[k];
+            records[k].value = slotVal[k];
+            records[k].controlCode = (k == 0) ? leU32FromBytes(data + 0) : 0; // only slot0's is meaningful; see startMarkerBytes
+            records[k].tension = 0.0f;
+            records[k].curveType = -1; // -1 = "no incoming curve" (only valid state for records[0])
+
+            // Tension/curveType for point (k+1) [1-indexed] live in slot
+            // (k+1), which for the LAST point is exactly the overflow slot
+            // that has no valid position/value of its own.
+            size_t tensionSlot = k + 1;
+            if (tensionSlot < numSlots)
+            {
+                const uint8_t* traw = data + tensionSlot * POINT_SIZE;
+                records[k].tension = leFloatFromBytes(traw + 0);
+                records[k].curveType = (int)traw[4];
+            }
+        }
+        // records[0] structurally has no incoming curve (nothing before the
+        // start point) - the tension/curveType we just read into it above
+        // actually belong to POINT 2 stored one slot later... wait, no:
+        // per the model, records[k]'s tension comes from slot(k+1), so
+        // records[0]'s tension legitimately comes from slot(1), which is
+        // real (point 1 has no incoming curve, so this is always an unused
+        // default in practice, but there's nothing to strip out here).
+
+        size_t consumedSlots = P + 1; // last point's tension/curveType slot is real and consumed
+        if (consumedSlots > numSlots) consumedSlots = numSlots;
+        size_t consumedBytes = consumedSlots * POINT_SIZE;
+        if (consumedBytes < remaining)
+            trailingData.append(data + consumedBytes, remaining - consumedBytes);
 
         // Also populate legacy points for backward compatibility
         for (const auto& rec : records) {
             AutomationPoint p;
-            p.beatIncrement = rec.position;  // Position used as beat increment in legacy
+            p.beatIncrement = rec.position;
             p.value = rec.value;
-            p.tension = 0.5f;  // Default tension
+            p.tension = rec.tension;
             p.unknown3[0] = 0;
             p.unknown3[1] = 0;
             p.unknown3[2] = 0;
             p.direction = 0;
             points.push_back(p);
         }
-    
     }
     void AutomationEvent::writeItems(juce::OutputStream& out) const
     {
-        // Write header (13 bytes)
-        // 01 00 00 00 40 00 00 00 00 04 00 00 00
-        out.writeByte(0x01);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-
-        // Write 0x00000040 as little-endian uint32
-        uint32_t val40 = 0x00000040;
-        uint32_t le40 = juce::ByteOrder::swapIfBigEndian(val40);
-        out.write(&le40, 4);
-
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-        out.writeByte(0x00);
-
-        // Write 0x00000400 as little-endian uint32
-        uint32_t val400 = 0x00000400;
-        uint32_t le400 = juce::ByteOrder::swapIfBigEndian(val400);
-        out.write(&le400, 4);
-
-        // Write records (24 bytes each)
-        for (const auto& rec : records) {
-            // controlCode (int32) - little-endian
-            uint32_t cc = juce::ByteOrder::swapIfBigEndian((uint32_t)rec.controlCode);
-            out.write(&cc, 4);
-
-            // curveType (int32) - little-endian
-            uint32_t ct = juce::ByteOrder::swapIfBigEndian((uint32_t)rec.curveType);
-            out.write(&ct, 4);
-
-            // position (double) - little-endian
-            writeDoubleLE(out, rec.position);
-
-            // value (double) - little-endian
-            writeDoubleLE(out, rec.value);
+        // Write the real on-disk header verbatim if we have one (i.e. this
+        // event came from parse()); otherwise fall back to the shape of a
+        // real captured header for a freshly-constructed event (e.g. from
+        // AutomationEditor::generateFadeCurve, which never goes through
+        // parse()).
+        if (headerBytes.getSize() == HEADER_SIZE)
+        {
+            out.write(headerBytes.getData(), (int)HEADER_SIZE);
         }
+        else
+        {
+            static const uint8_t kDefaultHeader[HEADER_SIZE] =
+                { 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00 };
+            out.write(kDefaultHeader, HEADER_SIZE);
+        }
+
+        if (records.empty())
+        {
+            if (trailingData.getSize() > 0)
+                out.write(trailingData.getData(), (int)trailingData.getSize());
+            return;
+        }
+
+        size_t P = records.size();
+        // Reconstruct P+1 slots: slot k's position/value = records[k]'s
+        // (for k<P); slot k's tension/curveType = records[k-1]'s (for k>=1).
+        // Slot 0's tension/curveType bytes are the preserved opaque start
+        // marker instead of records[-1] (which doesn't exist).
+        for (size_t slotIdx = 0; slotIdx <= P; ++slotIdx)
+        {
+            // bytes 0-7: tension (float) + curveType (byte) + 3 reserved,
+            // OR slot 0's verbatim opaque marker.
+            if (slotIdx == 0)
+            {
+                if (startMarkerBytes.getSize() == 8)
+                {
+                    out.write(startMarkerBytes.getData(), 8);
+                }
+                else
+                {
+                    // Freshly-generated curve with no parsed source: write
+                    // a plausible default start marker (controlCode=3,
+                    // second field 0 - meaning unconfirmed either way).
+                    uint32_t cc = juce::ByteOrder::swapIfBigEndian((uint32_t)3);
+                    out.write(&cc, 4);
+                    uint32_t zero = 0;
+                    out.write(&zero, 4);
+                }
+            }
+            else
+            {
+                const auto& owner = records[slotIdx - 1];
+                float tension = owner.tension;
+                uint32_t tbits;
+                std::memcpy(&tbits, &tension, 4);
+                tbits = juce::ByteOrder::swapIfBigEndian(tbits);
+                out.write(&tbits, 4);
+                uint8_t curveByte = (owner.curveType >= 0 && owner.curveType <= 255) ? (uint8_t)owner.curveType : 0;
+                uint8_t rest[4] = { curveByte, 0, 0, 0 };
+                out.write(rest, 4);
+            }
+
+            // bytes 8-23: position/value for point (slotIdx+1), i.e.
+            // records[slotIdx] - only present for slotIdx < P; the final
+            // (overflow) slot has no position/value of its own.
+            if (slotIdx < P)
+            {
+                writeDoubleLE(out, records[slotIdx].position);
+                writeDoubleLE(out, records[slotIdx].value);
+            }
+            else
+            {
+                // Overflow slot: position/value are meaningless (this is
+                // what shows up as NaN under a naive fixed-stride read).
+                // Write zeros rather than NaN so the file stays well-formed
+                // even though FL itself never reads these bytes.
+                writeDoubleLE(out, 0.0);
+                writeDoubleLE(out, 0.0);
+            }
+        }
+
+        // Write back whatever followed the real records verbatim.
+        if (trailingData.getSize() > 0)
+            out.write(trailingData.getData(), (int)trailingData.getSize());
     }
 
     void MixerBlobEvent::parse(juce::InputStream& in, size_t size)

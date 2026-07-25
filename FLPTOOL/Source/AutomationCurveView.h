@@ -19,17 +19,32 @@ public:
     AutomationCurveView();
 
     void setPoints(const std::vector<FL::AutomationEvent::Record>& newPoints);
+    // clipEndPosition: where this clip's Playlist placement actually ends,
+    // in the SAME units as Record::position. Testing against two real
+    // files found Record::position is NOT the "PPQ ticks" its own comment
+    // claims - a ramp ending at position 2.0038 sits inside playlist clips
+    // whose FL::PlaylistItem::length was 384/420 raw PPQ ticks (PPQ=96,
+    // i.e. 4.0/4.375 beats) - so position looks like it's actually in
+    // BEATS, matching the legacy AutomationPoint::beatIncrement naming.
+    // Caller must convert: clipEndPosition = playlistItem.length /
+    // project.getPPQ(). A clip can be drawn longer than its automation
+    // data - FL just holds the last value flat for the remainder,
+    // rather than storing extra points for it. Pass 0 if no matching
+    // playlist placement was found (falls back to the last record's
+    // position, same as before).
+    void setClipLength(double clipEndPosition);
     void clear();
 
     void paint(juce::Graphics& g) override;
 
 private:
     std::vector<FL::AutomationEvent::Record> points;
+    double clipEndPosition = 0.0;
 
     // t in [0,1] within a segment; a/b are the values at the segment's
     // start/end. Formulas per the curve-type table reverse-engineered
     // from FL 2026 (curveType is stored on the *arriving* point).
-    static double interpolate(int curveType, double a, double b, double t);
+    static double interpolate(int curveType, double a, double b, double t, float tension);
 
     juce::Rectangle<float> getPlotArea() const;
 

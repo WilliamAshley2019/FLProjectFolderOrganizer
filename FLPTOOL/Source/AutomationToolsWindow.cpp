@@ -265,6 +265,25 @@ void AutomationToolsComponent::refreshCurveView()
                     curveView.setPoints(autoEv->records);
                 else
                     curveView.clear();
+
+                // Cross-reference the Playlist: a clip can be drawn longer
+                // than the automation data it contains (FL just holds the
+                // last value flat for the remainder), and that length
+                // lives in FL::PlaylistItem::length, not in the automation
+                // event itself. itemIndex < patternBase means itemIndex IS
+                // a channel IID directly (audio/automation clip, not a
+                // pattern) - see the comment on this same check elsewhere
+                // in flphelper.cpp. Only checks arrangement 0 for now.
+                double clipEndInBeats = 0.0;
+                int ppq = p->getPPQ();
+                for (const auto& item : p->getArrangement(0).getPlaylistItems())
+                {
+                    if (item.itemIndex >= item.patternBase) continue; // pattern clip, not this channel
+                    if (item.itemIndex != iid) continue;
+                    if (ppq > 0)
+                        clipEndInBeats = std::max(clipEndInBeats, (double)item.length / (double)ppq);
+                }
+                curveView.setClipLength(clipEndInBeats);
                 return 0;
             }
             curveView.clear();

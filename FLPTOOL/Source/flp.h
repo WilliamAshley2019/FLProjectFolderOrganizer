@@ -570,13 +570,53 @@ namespace FL
         std::unique_ptr<Event> clone() const override { return std::make_unique<AutomationEvent>(*this); }
 
         // ============================================================
-        // NEW: Complete 24-byte Record Structure (decoded from FL Studio 2026)
+        // Complete Record structure - CONFIRMED against 7 real test files
+        // (2-point, 4-point, 7-point, and FL11-vs-FL26 tension-isolated
+        // pairs), covering position, value, tension, and 3 of the real
+        // curve-type values.
         // ============================================================
+        //
+        // IMPORTANT - this is NOT a flat per-point struct on disk. Each
+        // 24-byte slot in the file straddles TWO points:
+        //   - bytes  8-15 (position) and 16-23 (value) belong to point (k+1)
+        //   - bytes  0-3  (tension, float) and byte 4 (curveType) belong
+        //     to point k itself - i.e. one slot LATER than that point's
+        //     own position/value.
+        // This means a clip's real point data always needs one MORE
+        // 24-byte slot than its point count: the last point's own
+        // position/value live in slot (P-1), but its tension/curveType
+        // live in slot P, whose position/value bytes are unused (and read
+        // as NaN under the naive fixed-stride read that's how this was
+        // first noticed). parse() below reads that extra slot for tension/
+        // curveType only and does not treat it as an extra point.
+        //
+        // controlCode only carries real meaning on the very first slot
+        // (marks the start point) - preserved verbatim via startMarkerBytes
+        // rather than reinterpreted, since we don't know what its second
+        // int32 (values 2/4/7 seen across test files) means yet.
+        //
+        // curveType confirmed values so far: 0 = Single Curve, 1 = Double
+        // Curve, 5 = Pulse. Others are still the ORIGINAL reverse-engineering
+        // doc's guesses and are very possibly wrong (that doc's guessed
+        // Single Curve=0x02 and Linear=0x00 were both wrong) - treat
+        // anything not in {0,1,5} as unconfirmed.
+        //
+        // tension confirmed as a signed float, -1.0 to +1.0 (-100% to
+        // +100%), isolated via a single-variable before/after file pair.
+        // Sign is presumably which side of the segment the curve bulges
+        // toward; exact interpolation math using it is NOT confirmed,
+        // only its storage location/range.
+        //
+        // Pulse's additional "step count" parameter (confirmed to exist -
+        // e.g. "4 steps" vs "14 steps" on two real Pulse segments) has NOT
+        // been located yet; it isn't in this record at all as far as we've
+        // found. Rendered as a plain Hold for now (see AutomationCurveView).
         struct Record {
-            int32_t controlCode;   // 0x03=endpoint, 0x00=interior, -1=sentinel
-            int32_t curveType;     // 0x00-0x0C (see AutomationCurveType enum)
-            double position;       // PPQ ticks (relative to clip start)
-            double value;          // Normalized 0.0-1.0
+            int32_t controlCode;   // only meaningful on records[0]; opaque elsewhere, see startMarkerBytes
+            int32_t curveType;     // confirmed: 0=Single Curve, 1=Double Curve, 5=Pulse; others unconfirmed
+            double position;       // delta in BEATS from the previous point (not absolute, not PPQ ticks)
+            double value;          // normalized 0.0-1.0 fraction of the destination parameter's own range
+            float tension = 0.0f;  // signed, -1.0..+1.0; meaningless on records[0] (start has no incoming curve)
         };
 
         // Get number of steps/subdivisions
@@ -604,42 +644,37 @@ namespace FL
             }
         }
 
-        // Get human-readable curve type name
+        // Get human-readable curve type name. Only 0/1/5 are confirmed
+        // against real files (see the comment on Record) - everything
+        // else here is the ORIGINAL reverse-engineering doc's guess and
+        // should be treated as unverified; that doc's guesses for 0x00
+        // and 0x02 were both wrong.
         static juce::String getCurveTypeName(int curveType) {
             switch (curveType) {
-            case 0x00: return "Linear";
-            case 0x01: return "Double Curve (S-curve)";
-            case 0x02: return "Single Curve (Bezier)";
-            case 0x03: return "Stairs";
-            case 0x04: return "Smooth Stairs";
-            case 0x05: return "Half Sine";
-            case 0x06: return "Hold/Pulse";
-            case 0x07: return "Wave (Full Sine)";
-            case 0x08: return "Flat Anchor";
-            case 0x09: return "Single Curve 2";
-            case 0x0A: return "Single Curve 3";
-            case 0x0B: return "Double Curve 2";
-            case 0x0C: return "Double Curve 3";
+            case 0: return "Single Curve";       // CONFIRMED
+            case 1: return "Double Curve";       // CONFIRMED
+            case 5: return "Pulse";              // CONFIRMED (step count not yet decoded)
+            case 0x03: return "Stairs (unconfirmed)";
+            case 0x04: return "Smooth Stairs (unconfirmed)";
+            case 0x06: return "Hold (unconfirmed)";
+            case 0x07: return "Wave (unconfirmed)";
+            case 0x08: return "Flat Anchor (unconfirmed)";
             default: return "Unknown (" + juce::String(curveType) + ")";
             }
         }
 
-        // Get all curve type names for UI dropdowns
+        // Get all curve type names for UI dropdowns. Only the first 3 are
+        // confirmed - see getCurveTypeName.
         static std::vector<std::pair<int, juce::String>> getCurveTypeList() {
             return {
-                {0x00, "Linear"},
-                {0x01, "Double Curve (S-curve)"},
-                {0x02, "Single Curve (Bezier)"},
-                {0x03, "Stairs"},
-                {0x04, "Smooth Stairs"},
-                {0x05, "Half Sine"},
-                {0x06, "Hold/Pulse"},
-                {0x07, "Wave (Full Sine)"},
-                {0x08, "Flat Anchor"},
-                {0x09, "Single Curve 2"},
-                {0x0A, "Single Curve 3"},
-                {0x0B, "Double Curve 2"},
-                {0x0C, "Double Curve 3"}
+                {0, "Single Curve"},
+                {1, "Double Curve"},
+                {5, "Pulse"},
+                {0x03, "Stairs (unconfirmed)"},
+                {0x04, "Smooth Stairs (unconfirmed)"},
+                {0x06, "Hold (unconfirmed)"},
+                {0x07, "Wave (unconfirmed)"},
+                {0x08, "Flat Anchor (unconfirmed)"}
             };
         }
 
@@ -648,6 +683,33 @@ namespace FL
 
         // NEW: Complete records (replaces points for modern FLP files)
         std::vector<Record> records;
+
+        // Real-file testing (see comment on parse()) found that dividing
+        // (payloadSize - HEADER_SIZE) by POINT_SIZE overclaims: only the
+        // first couple of "records" for a genuine 2-point clip decoded to
+        // sane values: bytes past that point failed basic sanity checks
+        // (curveType outside 0x00-0x0C, controlCode not one of 0/3/-1) and
+        // are something else entirely - almost certainly the "PluginSettings
+        // (binary blob)" mentioned in the original reverse-engineering notes,
+        // not more Records. Preserved verbatim and rewritten unchanged so
+        // Save Project As doesn't corrupt files we don't fully understand
+        // yet. Still needs a file with 3+ real points to confirm where the
+        // real cutoff actually is.
+        juce::MemoryBlock trailingData;
+
+        // Slot 0's bytes 0-7, verbatim. Consistently starts with controlCode
+        // 3 (marking the start point) but its second int32 varies across
+        // real files (2, 4, 7 seen) with unknown meaning - preserved as-is
+        // rather than guessed at, so edits never corrupt it.
+        juce::MemoryBlock startMarkerBytes;
+
+        // The 13-byte header, captured verbatim at parse time. writeItems()
+        // used to hardcode a *different*, longer (16-byte) fixed pattern
+        // that doesn't match what real files on disk actually contain -
+        // that mismatch alone would desync every byte after this event on
+        // Save Project As. Round-tripping the real bytes sidesteps needing
+        // to fully decode this header's meaning for now.
+        juce::MemoryBlock headerBytes;
 
     private:
         static constexpr size_t POINT_SIZE = 24; // 8+8+4+3+1
