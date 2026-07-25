@@ -11,7 +11,7 @@ TO DO
 Mutlipier envelope boolean onoff 1bit?
 Speed (SPD): 0% → 0.0, 100% → likely 10.0 Hz (the maximum speed in FL Studio's UI)
 Tension (TNS): 0% → 0.0, 100% → 1.0 (or maybe -1.0, need to check sign)
-Skew (SCREW): 0% → 0.0, 100% → 1.0
+Skew (SKEW): 0% → 0.0, 100% → 1.0
 Pulse Width (PW): 0% → 0.0, 100% → 1.0
 Level (AMNT): 0% → 0.0, 100% → 1.0 (this is interesting - FL Studio's Level knob goes from -100% to +100%, with 0% at center. So 0% value = 0.0, 100% = 1.0)
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
