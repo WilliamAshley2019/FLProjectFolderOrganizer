@@ -3,7 +3,7 @@ This project is independent and is not affiliated with Image-Line / FL Studio. T
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
 2026-07-25 - the project continues hopefully an update correct some errors in automation data assumptions, may have it understood now.  Need to test. Effectively it works just like the UI
-behaves. But with a couple nuances as to how the datapoints are shared.
+behaves. But with a couple nuances as to how the datapoints are shared. It is actually very logical in how the points are ordered. However knowing what and how many bytes each aspect of the curve is a lot of guesswork.
 
 How automation point data "might work"
 Start (slot 0) + point 1's own position (always 0) and value. No incoming curve.
