@@ -13,7 +13,7 @@ Speed (SPD): 0% → 0.0, 100% → likely 10.0 Hz (the maximum speed in FL Studio
 Tension (TNS): 0% → 0.0, 100% → 1.0 (or maybe -1.0, need to check sign)
 Skew (SKEW): 0% → 0.0, 100% → 1.0
 Pulse Width (PW): 0% → 0.0, 100% → 1.0
-Level (AMNT): 0% → 0.0, 100% → 1.0 (this is interesting - FL Studio's Level knob goes from -100% to +100%, with 0% at center. So 0% value = 0.0, 100% = 1.0)
+Level (AMNT): 0% → 0.0, 100% → 1.0 ( . So 0% value = 0.0, 100% = 1.0) ??
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
 3.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
