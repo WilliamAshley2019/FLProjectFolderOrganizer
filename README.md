@@ -5,7 +5,8 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 2026-07-25 automation tools slight improvement to automation detection has been updated to graphically represent the automation. more testing and refinement is needed but I think I am much closer to getting it working. 
 
 TO DO 
-1. I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
+1. I sort of forgot about the LFO  I  am guessing some of the automation info also contains FLO information (I don't use automation much)
+2.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
 
    What is left is likely simple math for min / max steps determining total steps at each tension then correlating the tension ratio to step ratio.
    Pulse at tension 0.0 (center)  
