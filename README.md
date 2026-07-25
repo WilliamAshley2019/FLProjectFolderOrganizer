@@ -6,7 +6,17 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 
 TO DO 
 1. I sort of forgot about the LFO  I  am guessing some of the automation info also contains LFO information (I don't use automation much)
-2.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
+```text┌─────────────────────────────────────────────────────────────────────────────────────┐
+   ??
+Mutlipier envelope boolean onoff 1bit?
+Speed (SPD): 0% → 0.0, 100% → likely 10.0 Hz (the maximum speed in FL Studio's UI)
+Tension (TNS): 0% → 0.0, 100% → 1.0 (or maybe -1.0, need to check sign)
+Skew (SCREW): 0% → 0.0, 100% → 1.0
+Pulse Width (PW): 0% → 0.0, 100% → 1.0
+Level (AMNT): 0% → 0.0, 100% → 1.0 (this is interesting - FL Studio's Level knob goes from -100% to +100%, with 0% at center. So 0% value = 0.0, 100% = 1.0)
+└──────────────────────────────────────┴──────────────────────────────────────────────┘
+```
+3.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
 
    What is left is likely simple math for min / max steps determining total steps at each tension then correlating the tension ratio to step ratio. It appears to be a  audio frequency/parameter scaling similar to  exponential logarithmic behavior common to a lot of audio dials where small changes near one end produce large effects so thing small changes early when you turn the volume knob but large changes the more you turn the knob (almost reverse concept but you get the point more effect the more the knob turns) more precision near the start of the curve more points as the knob turns less and less.  Something like steps = A * exp(-B * (tension_percent - 100)) + C
   // Convert tension percent (0-100) to a 0-1 range, but reversed
@@ -42,6 +52,7 @@ Same for Stairs and Wave
 0x0C	Double Curve 3	Controls S-curve asymmetry
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
+```text┌─────────────────────────────────────────────────────────────────────────────────────┐
 ??? int getStepCountForTension(float tensionPercent) {
     // tensionPercent: 0.0 to 1.0 (where 1.0 = 100% = maximum tension)
      float p = tensionPercent * 100.0f; // 0-100
@@ -64,7 +75,8 @@ Same for Stairs and Wave
     
     return (int)std::round(steps);
 }
-
+└──────────────────────────────────────┴──────────────────────────────────────────────┘
+```
 
 3. I need to fixure out a format the automations can be exported as, or create a export file type unique to automations so they can be migrated for other purposes
 
