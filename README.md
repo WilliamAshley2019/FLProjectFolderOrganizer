@@ -44,8 +44,7 @@ Same for Stairs and Wave
 ```
 ??? int getStepCountForTension(float tensionPercent) {
     // tensionPercent: 0.0 to 1.0 (where 1.0 = 100% = maximum tension)
-    // Convert to the range used in your observations
-    float p = tensionPercent * 100.0f; // 0-100
+     float p = tensionPercent * 100.0f; // 0-100
     
     // The mapping from your data:
     // 100-92%: 0 steps (flatline)
