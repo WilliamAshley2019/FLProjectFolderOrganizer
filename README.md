@@ -6,7 +6,7 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 behaves. But with a couple nuances as to how the datapoints are shared. It is actually very logical in how the points are ordered. However knowing what and how many bytes each aspect of the line segment is a lot of guesswork.
 
 How automation point data "might work"
-Start (slot 0) + point 1's own position (always 0) and value. No incoming curve.
+Start (slot 0) + point 1's own position (always 0"?") and value. No incoming curve.
 Every point P after that has its position/value stored in slot (P−1)'s last 16 bytes
 Its tension/curve-type stored in slot P's first 8 bytes — one slot later. (Regressive mapping (makes sense to plot a line since the last point is not forward directing)
 It overlaps the 24 bytes.
