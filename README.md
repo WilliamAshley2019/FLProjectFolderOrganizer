@@ -8,7 +8,7 @@ TO DO
 1. I sort of forgot about the LFO  I  am guessing some of the automation info also contains LFO information (I don't use automation much)
 2.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
 
-   What is left is likely simple math for min / max steps determining total steps at each tension then correlating the tension ratio to step ratio.
+   What is left is likely simple math for min / max steps determining total steps at each tension then correlating the tension ratio to step ratio. It appears to be a  audio frequency/parameter scaling similar to  exponential logarithmic behavior common to a lot of audio dials where small changes near one end produce large effects so thing small changes early when you turn the volume knob but large changes the more you turn the knob (almost reverse concept but you get the point more effect the more the knob turns) more precision near the start of the curve more points as the knob turns less and less.
    Pulse at tension 0.0 (center)  
 
 Pulse at tension 1.0 (maximum)  
