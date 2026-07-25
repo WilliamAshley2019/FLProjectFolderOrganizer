@@ -29,6 +29,17 @@ struct AutomationChannelLFOData {
     float pulseWidth;         // 0.0 to 1.0 (0% → 0.0, 100% → 1.0)
     float level;              // -1.0 to 1.0 (0% → 0.0, 100% → 1.0)
 };
+
+??
+
+Parameter	Type	  Range	0%	100% Value	Notes
+LFO Enable	uint8_t	0/1	0	1	          Stores whether LFO is active
+Multiplier	uint8_t	0/1	0	1	0=Add, 1=Multiply
+Speed	float	0.0-10.0	0.0f	10.0f	            LFO frequency in Hz ????
+Tension	float	-1.0 to 1.0	0.0f	1.0f	      
+Skew	float	0.0-1.0	0.0f	1.0f	
+Pulse Width	float	0.0-1.0	0.0f	1.0f
+AMNT	float	-1.0 to 1.0	0.0f	1.0f	Amplitude of LFO?
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
 3.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
