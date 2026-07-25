@@ -42,6 +42,31 @@ Same for Stairs and Wave
 0x0C	Double Curve 3	Controls S-curve asymmetry
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
+??? int getStepCountForTension(float tensionPercent) {
+    // tensionPercent: 0.0 to 1.0 (where 1.0 = 100% = maximum tension)
+    // Convert to the range used in your observations
+    float p = tensionPercent * 100.0f; // 0-100
+    
+    // The mapping from your data:
+    // 100-92%: 0 steps (flatline)
+    // 91-79%: 2 steps
+    // Then exponential growth
+    
+    if (p >= 92.0f) return 0;
+    if (p >= 79.0f) return 2;
+    
+    // For p < 79%, use exponential mapping
+    // Normalize to 0-1 where lower tension = higher step count
+    float normalized = (79.0f - p) / 79.0f; // 0 at 79%, 1 at 0%
+    
+    // Exponential: steps = 2 * exp(normalized * 4.5)
+    // This gives 3 at 78%, 18 at 50%, ~22 at 46%
+    float steps = 2.0f * std::exp(normalized * 4.5f);
+    
+    return (int)std::round(steps);
+}
+
+
 3. I need to fixure out a format the automations can be exported as, or create a export file type unique to automations so they can be migrated for other purposes
 4. get the sample collection mechanism working for using the sample data base and file info to copy the samples into the working folder of the flp or a designated folder.
 
