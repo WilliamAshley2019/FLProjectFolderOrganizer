@@ -42,6 +42,8 @@ Pulse Width	float	0.0-1.0	0.0f	1.0f
 AMNT	float	-1.0 to 1.0	0.0f	1.0f	Amplitude of LFO?
 
 Values 0x00 0x00  to 0x80 0x3F  0% to 100% ??
+two more hex values are there however I am not sure if they are volume related I think they likely reference some other value like maybe peak and crest of lfo or something.
+But it seems tied to the same 4 bit for each knob section. Don't quite understand what the other two values are.
 └──────────────────────────────────────┴──────────────────────────────────────────────┘
 ```
 3.  I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
