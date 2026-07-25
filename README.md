@@ -46,7 +46,7 @@ Same for Stairs and Wave
     // tensionPercent: 0.0 to 1.0 (where 1.0 = 100% = maximum tension)
      float p = tensionPercent * 100.0f; // 0-100
     
-    // The mapping from your data:
+   
     // 100-92%: 0 steps (flatline)
     // 91-79%: 2 steps
     // Then exponential growth
