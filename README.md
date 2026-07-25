@@ -6,8 +6,8 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 
 TO DO 
 1. I need to figure out step data and get all automation types properly represented. EDIT HAHA, so I was a little stupid as it was explained the the MANUAL itself :)
-
-2. 0x00	Single Curve	Controls curve steepness
+```text┌─────────────────────────────────────────────────────────────────────────────────────┐
+0x00	Single Curve	Controls curve steepness
 0x01	Double Curve	Controls S-curve asymmetry
 0x02	Alt Single Curve	Controls curve steepness
 0x03	Stairs	Controls step frequency
@@ -20,6 +20,8 @@ TO DO
 0x0A	Single Curve 3	Controls curve steepness
 0x0B	Double Curve 2	Controls S-curve asymmetry
 0x0C	Double Curve 3	Controls S-curve asymmetry
+└──────────────────────────────────────┴──────────────────────────────────────────────┘
+```
 3. I need to fixure out a format the automations can be exported as, or create a export file type unique to automations so they can be migrated for other purposes
 4. get the sample collection mechanism working for using the sample data base and file info to copy the samples into the working folder of the flp or a designated folder.
 
