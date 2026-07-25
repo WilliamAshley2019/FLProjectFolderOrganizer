@@ -2,6 +2,16 @@ This project is independent and is not affiliated with Image-Line / FL Studio. T
 
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
+2026-07-25 automation tools slight improvement to automation detection has been updated to graphically represent the automation. more testing and refinement is needed but I think I am much closer to getting it working. 
+
+TO DO 
+1. I need to figure out step data and get all automation types properly represented.
+2. I need to fixure out a format the automations can be exported as, or create a export file type unique to automations so they can be migrated for other purposes
+4. get the sample collection mechanism working for using the sample data base and file info to copy the samples into the working folder of the flp or a designated folder.
+
+
+
+
 2026-07-25 - the project continues hopefully an update correct some errors in automation data assumptions, may have it understood now.  Need to test. Effectively it works just like the UI
 behaves. But with a couple nuances as to how the datapoints are shared. It is actually very logical in how the points are ordered. However knowing what and how many bytes each aspect of the line segment is a lot of guesswork.
 
