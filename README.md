@@ -5,7 +5,8 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 2026-07-25 automation tools slight improvement to automation detection has been updated to graphically represent the automation. more testing and refinement is needed but I think I am much closer to getting it working. 
 
 TO DO 
-1. I sort of forgot about the LFO  I  am guessing some of the automation info also contains LFO information (I don't use automation much)
+1. I sort of forgot about the LFO  I  am guessing some of the automation info also contains LFO information (I don't use automation much).
+   NOTE: This is best guess only, it may not be correct.
 ```text┌─────────────────────────────────────────────────────────────────────────────────────┐
    ??
 Mutlipier envelope boolean onoff 1bit?
