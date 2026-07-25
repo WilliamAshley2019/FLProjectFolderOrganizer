@@ -67,7 +67,12 @@ Same for Stairs and Wave
 
 
 3. I need to fixure out a format the automations can be exported as, or create a export file type unique to automations so they can be migrated for other purposes
-4. get the sample collection mechanism working for using the sample data base and file info to copy the samples into the working folder of the flp or a designated folder.
+
+   a.) a long term goal should be to make the data from flptoolkit / flprojectorganizer able to convert to dawproject format etc..
+   How it handles automation: It stores volume, pan, mutes, sends, tempo, time signature, and plugin/device parameter automation inside an XML structure.
+   However, there is no universal automation file format so the exact usages are broad, currently perhaps use with plugins like vsts using an automation map that is drawn in fl studio then loaded into the custom plugin using that automation.
+   
+5. get the sample collection mechanism working for using the sample data base and file info to copy the samples into the working folder of the flp or a designated folder.
 
 
 
