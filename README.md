@@ -6,7 +6,7 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 behaves. But with a couple nuances as to how the datapoints are shared. It is actually very logical in how the points are ordered. However knowing what and how many bytes each aspect of the line segment is a lot of guesswork.
 
 How automation point data "might work"
-Start (slot 0) + point 1's own position (always 0"?") and value. No incoming curve.
+Start (slot 0) + point 1's own position (always 0"?") and value. No incoming curve. What I don't know is if automation clips are stored releative to a virtual location are are mapped to the len of any point they are placed, I want to think they are relative to a type of "pattern" that is non linear or a pocket and only each placement of the clip is somehow mapped rather than each automation clip being  mapped directly to the location it occurs with values internally in the line (automation) being value adjusted based on placement, my guess is currently automation clips exist in a pocket seperate from playlist position and the clip itself holds some type of placement information as a container to play the automation within it.
 Every point P after that has its position/value stored in slot (P−1)'s last 16 bytes
 Its tension/curve-type stored in slot P's first 8 bytes — one slot later. (Regressive mapping (makes sense to plot a line since the last point is not forward directing)
 It overlaps the 24 bytes.
