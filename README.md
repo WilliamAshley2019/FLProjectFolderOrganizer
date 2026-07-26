@@ -3,7 +3,9 @@ This project is independent and is not affiliated with Image-Line / FL Studio. T
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
 2026-07-26 a little more testing on automation. LFO was tested and determined 
-To Do IN FLPToolkit's automation tool need to change from "single line" detection type to per point detection and get the drawing to be representative of the actual line and map the  tension to steps to properly graphically represent.
+To Do:
+1. IN FLPToolkit's automation tool need to change from "single line" detection type to per point detection and get the drawing to be representative of the actual line and map the  tension to steps to properly graphically represent.
+
 2. need to add in a LFO  boxview.
 
 2026-07-25 automation tools slight improvement to automation detection has been updated to graphically represent the automation. more testing and refinement is needed but I think I am much closer to getting it working. 
