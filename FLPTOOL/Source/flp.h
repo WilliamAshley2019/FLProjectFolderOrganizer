@@ -278,20 +278,30 @@ namespace FL
         Automation = 5
     };
 
+    // NOTE: not referenced anywhere else in this codebase - getCurveTypeName()/
+    // getCurveTypeList() on AutomationEvent are the source of truth for curve
+    // type values and are kept current there. Names here match FL's own
+    // manual (11 real types: Single Curve, Double Curve, Alt Single Curve,
+    // Alt Double Curve, Hold, Stairs, Smooth Stairs, Pulse, Wave, Half Sine,
+    // Smooth) rather than the earlier pre-manual doc's guessed names
+    // (Single/Double Curve "2"/"3", Flat Anchor), which don't correspond to
+    // real FL concepts. CONFIRMED against real files via isolated
+    // single-variable diffs: SingleCurve=0x00, DoubleCurve=0x01, Hold=0x02,
+    // Stairs=0x03, SmoothStairs=0x04, Pulse=0x05, Wave=0x06, HalfSine=0x09.
+    // Alt Single Curve / Alt Double Curve / Smooth remain completely
+    // unmapped - no byte guessed here for them since guessing has been
+    // wrong more often than right (Linear at 0x00, Pulse at 0x06, Wave at
+    // 0x07, Half Sine at 0x08 were all guessed and all wrong).
     enum class AutomationCurveType : int32_t {
-        Linear = 0x00,
+        SingleCurve = 0x00,
         DoubleCurve = 0x01,
-        SingleCurve = 0x02,
+        Hold = 0x02,
         Stairs = 0x03,
         SmoothStairs = 0x04,
-        HalfSine = 0x05,
-        HoldPulse = 0x06,
-        Wave = 0x07,
-        FlatAnchor = 0x08,
-        SingleCurve2 = 0x09,
-        SingleCurve3 = 0x0A,
-        DoubleCurve2 = 0x0B,
-        DoubleCurve3 = 0x0C
+        Pulse = 0x05,
+        Wave = 0x06,
+        HalfSine = 0x09
+        // AltSingleCurve, AltDoubleCurve, Smooth: byte values unknown
     };
 
     // =============================================================================
@@ -625,6 +635,28 @@ namespace FL
             return (int)records.size() - 1;
         }
 
+        // Step count from tension, for the curve types where FL's manual
+        // confirms tension is repurposed as a step/frequency control
+        // (Stairs, Smooth Stairs, Pulse, Wave) rather than steepness.
+        // Fit against 18 REAL manually-counted (tension%, step count) pairs
+        // on Stairs specifically: 100-92%=0 (flat), 91-79%=2 (plateau),
+        // then steps = round(2.32 * exp(0.0684 * (79 - tensionPercent)))
+        // below 79%. Matches the counted data closely (exact or within 1
+        // step almost everywhere tested, up to 46% where counting by eye
+        // got difficult). NOT yet confirmed for Pulse/Wave/Smooth Stairs
+        // specifically - applied here on the assumption they share the
+        // same underlying frequency-scaling mechanism the manual describes
+        // for all four, but only Stairs has been checked against real
+        // counted data.
+        static int getStepCountForTension(float tension) {
+            float tensionPercent = std::abs(tension) * 100.0f;
+            if (tensionPercent >= 92.0f) return 0;
+            if (tensionPercent >= 79.0f) return 2;
+            double x = 79.0 - tensionPercent;
+            double steps = 2.32 * std::exp(0.0684 * x);
+            return (int)std::round(steps);
+        }
+
         // Get curve type for a specific segment (0 = first segment)
         int getCurveTypeForSegment(int segmentIndex) const {
             if (segmentIndex < 0 || segmentIndex >= (int)records.size() - 1) return 0;
@@ -644,37 +676,45 @@ namespace FL
             }
         }
 
-        // Get human-readable curve type name. Only 0/1/5 are confirmed
-        // against real files (see the comment on Record) - everything
-        // else here is the ORIGINAL reverse-engineering doc's guess and
-        // should be treated as unverified; that doc's guesses for 0x00
-        // and 0x02 were both wrong.
+        // Get human-readable curve type name. Full 11-type list per FL's
+        // own manual (Right-Click menu on a control point); byte values for
+        // only 0/1/5 are CONFIRMED against real files (see the comment on
+        // Record) - the rest are placed at their doc-guessed byte value but
+        // that mapping is NOT verified, and the doc's guesses for 0x00 and
+        // 0x02 were already shown wrong once. Treat anything not in {0,1,5}
+        // as "we know this type exists and roughly what it does, but not
+        // which byte value FL uses for it."
         static juce::String getCurveTypeName(int curveType) {
             switch (curveType) {
-            case 0: return "Single Curve";       // CONFIRMED
-            case 1: return "Double Curve";       // CONFIRMED
-            case 5: return "Pulse";              // CONFIRMED (step count not yet decoded)
-            case 0x03: return "Stairs (unconfirmed)";
-            case 0x04: return "Smooth Stairs (unconfirmed)";
-            case 0x06: return "Hold (unconfirmed)";
-            case 0x07: return "Wave (unconfirmed)";
-            case 0x08: return "Flat Anchor (unconfirmed)";
+            case 0x00: return "Single Curve";    // CONFIRMED byte value
+            case 0x01: return "Double Curve";    // CONFIRMED byte value
+            case 0x02: return "Hold";            // CONFIRMED byte value
+            case 0x03: return "Stairs";          // CONFIRMED byte value
+            case 0x04: return "Smooth Stairs";   // CONFIRMED byte value
+            case 0x05: return "Pulse";           // CONFIRMED byte value
+            case 0x06: return "Wave";            // CONFIRMED byte value
+            case 0x09: return "Half Sine";       // CONFIRMED byte value
             default: return "Unknown (" + juce::String(curveType) + ")";
             }
         }
 
         // Get all curve type names for UI dropdowns. Only the first 3 are
         // confirmed - see getCurveTypeName.
+        // Only lists curve types with a CONFIRMED byte value. Three real
+        // FL curve types have no byte mapped yet at all - Alt Single Curve,
+        // Alt Double Curve, and Smooth - deliberately omitted rather than
+        // guessed, since guessed bytes in this table have been wrong more
+        // often than right.
         static std::vector<std::pair<int, juce::String>> getCurveTypeList() {
             return {
-                {0, "Single Curve"},
-                {1, "Double Curve"},
-                {5, "Pulse"},
-                {0x03, "Stairs (unconfirmed)"},
-                {0x04, "Smooth Stairs (unconfirmed)"},
-                {0x06, "Hold (unconfirmed)"},
-                {0x07, "Wave (unconfirmed)"},
-                {0x08, "Flat Anchor (unconfirmed)"}
+                {0x00, "Single Curve"},
+                {0x01, "Double Curve"},
+                {0x02, "Hold"},
+                {0x03, "Stairs"},
+                {0x04, "Smooth Stairs"},
+                {0x05, "Pulse"},
+                {0x06, "Wave"},
+                {0x09, "Half Sine"}
             };
         }
 

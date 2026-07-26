@@ -30,14 +30,23 @@ double AutomationCurveView::interpolate(int curveType, double a, double b, doubl
 
     switch (curveType)
     {
-        case 0:  
+        case 0: // Single Curve - CONFIRMED curveType value. Tension's exact
+                // effect on FL's own rendering math is NOT confirmed (only
+                // its storage - a signed float, -1..1 - is). Modeled here
+                // as a quadratic Bezier whose control point bulges toward
+                // one endpoint by `tension`; matches the "drag the dot up
+                // or down" description but hasn't been visually verified
+                // against FL's actual display yet.
         {
             double mid = (a + b) * 0.5 + tension * (b - a) * 0.5;
             double u = 1.0 - t;
             return u * u * a + 2.0 * u * t * mid + t * t * b;
         }
 
-        case 1:  
+        case 1: // Double Curve - CONFIRMED curveType value. Same caveat on
+                 // tension's exact math as Single Curve above; modeled as
+                 // an asymmetric ease-in-out whose inflection point shifts
+                 // with tension.
         {
             double p = std::pow(2.0, -tension * 2.0); // tension>0 -> p<1 (eases earlier), tension<0 -> p>1
             double tw = std::pow(t, p);
@@ -46,19 +55,67 @@ double AutomationCurveView::interpolate(int curveType, double a, double b, doubl
             return a + (b - a) * e;
         }
 
-        case 5: 
-            return (t < 0.999) ? a : b;
+        case 0x03: // Stairs - CONFIRMED byte value. Monotonic staircase:
+                   // steps climb from a to b. This is the type the step
+                   // formula was actually fit against.
+        {
+            int steps = FL::AutomationEvent::getStepCountForTension(tension);
+            if (steps <= 0) return a; // flatline (tension near +/-100%)
+            if (t >= 1.0) return b;
+            int stepIndex = juce::jlimit(0, steps - 1, (int)std::floor(t * steps));
+            double levelT = (steps > 1) ? (double)stepIndex / (double)(steps - 1) : 0.0;
+            return a + (b - a) * levelT;
+        }
 
-         
-        case 0x03: return (t < 0.5) ? a : b;
-        case 0x04: { double w = t * t * (3.0 - 2.0 * t); return a + (b - a) * (w * w * (3.0 - 2.0 * w)); }
-        case 0x06: return (t < 0.99) ? a : b;
-        case 0x07: return a + (b - a) * (std::sin(t * 2.0 * juce::MathConstants<double>::pi
-                                            - juce::MathConstants<double>::pi / 2.0) * 0.5 + 0.5);
+        case 0x04: // Smooth Stairs - CONFIRMED byte value. Same staircase, but
+                   // eased between levels rather than a hard jump.
+        {
+            int steps = FL::AutomationEvent::getStepCountForTension(tension);
+            if (steps <= 0) return a;
+            if (t >= 1.0) return b;
+            double scaled = t * steps;
+            int stepIndex = juce::jlimit(0, steps - 1, (int)std::floor(scaled));
+            double localT = scaled - stepIndex;
+            double eased = localT * localT * (3.0 - 2.0 * localT);
+            double levelA = (steps > 1) ? (double)stepIndex / (double)(steps - 1) : 0.0;
+            double levelB = (steps > 1) ? (double)std::min(stepIndex + 1, steps - 1) / (double)(steps - 1) : 1.0;
+            return a + (b - a) * (levelA + (levelB - levelA) * eased);
+        }
+
+        case 5: // Pulse - CONFIRMED curveType value. Manual: "square wave
+                // pulse" - unlike Stairs this ALTERNATES between a and b
+                // rather than climbing monotonically between them.
+        {
+            int steps = FL::AutomationEvent::getStepCountForTension(tension);
+            if (steps <= 0) return a;
+            int stepIndex = juce::jlimit(0, steps - 1, (int)std::floor(t * steps));
+            return (stepIndex % 2 == 0) ? a : b;
+        }
+
+        case 0x06: // Wave - CONFIRMED byte value. Manual: "sine wave pulse,
+                   // adjust frequency with tension" - reusing step count
+                   // as cycle count.
+        {
+            int cycles = std::max(1, FL::AutomationEvent::getStepCountForTension(tension));
+            double phase = t * cycles * 2.0 * juce::MathConstants<double>::pi;
+            return a + (b - a) * (std::sin(phase) * 0.5 + 0.5);
+        }
+
+        case 0x02: // Hold - CONFIRMED byte value
+            return (t < 0.99) ? a : b;
+
+        case 0x09: // Half Sine - CONFIRMED byte value. Manual: "one half of
+                   // a sine wave... start, stop and scratch effects."
+            return a + (b - a) * std::sin(t * juce::MathConstants<double>::pi / 2.0);
+
+        // 0x08 is a leftover placeholder guess (originally "Flat Anchor")
+        // from the pre-manual reverse-engineering doc - not a real FL
+        // manual type name, byte unconfirmed, kept only as a harmless
+        // fallback in case it shows up in a real file.
         case 0x08: return a;
 
         default:
-            return a + (b - a) * t;  
+            return a + (b - a) * t; // unrecognized curveType byte: fall back to linear
     }
 }
 
@@ -84,7 +141,11 @@ void AutomationCurveView::paint(juce::Graphics& g)
         return;
     }
 
-     
+    // Record::position is a DELTA in beats from the previous point (matches
+    // the legacy AutomationPoint::beatIncrement naming), NOT an absolute
+    // position - confirmed against a file with known beat-spaced points.
+    // Accumulate before using it for layout, or every point past the
+    // second one plots in the wrong place.
     std::vector<double> absPos(points.size());
     double running = 0.0;
     for (size_t i = 0; i < points.size(); ++i)
@@ -93,7 +154,8 @@ void AutomationCurveView::paint(juce::Graphics& g)
         absPos[i] = running;
     }
 
-     
+    // Ranges. Value nominally 0..1 but pad slightly and also expand to fit
+    // out-of-range values (e.g. after Scale) rather than clip them off-view.
     double minPos = absPos.front();
     double lastRecordPos = absPos.back();
     double maxPos = std::max(lastRecordPos, clipEndPosition);
@@ -115,7 +177,7 @@ void AutomationCurveView::paint(juce::Graphics& g)
         return area.getBottom() - (float)((val - minVal) / (maxVal - minVal)) * area.getHeight();
     };
 
-    
+    // Gridlines at 0.0 / 0.5 / 1.0 value if within range
     g.setColour(juce::Colour(0xFF2A2A2A));
     for (double gridVal : { 0.0, 0.5, 1.0 })
     {
@@ -124,14 +186,14 @@ void AutomationCurveView::paint(juce::Graphics& g)
         g.drawHorizontalLine((int)y, area.getX(), area.getRight());
     }
 
-     
+    // Build the curve path, sampling each segment per its curveType
     juce::Path curve;
     constexpr int kSamplesPerSegment = 32;
     for (size_t i = 0; i + 1 < points.size(); ++i)
     {
         const auto& p0 = points[i];
         const auto& p1 = points[i + 1];
-        int curveType = p1.curveType;  
+        int curveType = p1.curveType; // segment's shape lives on the arriving point
         float tension = p1.tension;
 
         for (int s = 0; s <= kSamplesPerSegment; ++s)
@@ -146,7 +208,7 @@ void AutomationCurveView::paint(juce::Graphics& g)
         }
     }
 
-     
+    // Filled area under the curve for readability
     juce::Path fill = curve;
     fill.lineTo(xForPos(maxPos), area.getBottom());
     fill.lineTo(xForPos(minPos), area.getBottom());
@@ -157,7 +219,8 @@ void AutomationCurveView::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xFFFF5C00));
     g.strokePath(curve, juce::PathStrokeType(2.0f));
 
-     
+    // Flat hold past the last real point, if the clip's Playlist placement
+    // runs longer than the automation data itself (see setClipLength doc).
     if (maxPos > lastRecordPos)
     {
         float xStart = xForPos(lastRecordPos);
@@ -177,7 +240,7 @@ void AutomationCurveView::paint(juce::Graphics& g)
             juce::Justification::centredRight);
     }
 
-  
+    // Point handles
     for (size_t i = 0; i < points.size(); ++i)
     {
         float x = xForPos(absPos[i]);
