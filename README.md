@@ -13,6 +13,8 @@ No timeline on how long it will take to update currently I will likely wait unti
 going on with the flp format as at this point I really don't understand what has changed but I am guessing something has changed with how mixer tracks
 are treated it may just be "more"  count on how it is structure but it could be a total rewrite of the blobs and calls which would likely lead to this tool
 being fairly broken it will take time to figure out what the situation is.
+
+TO DO - get the buttons more readable and contrastive currently metal on metal is making it a little obscured. Like to have "active" vs non active tab colour ratehr than the multicolour organizational tabbing. 
  
 
 2026-07-26 a little more testing on automation. LFO was tested and determined 
