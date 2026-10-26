@@ -8,9 +8,8 @@
 // Candidates are tried in order and the first one that actually looks like an FL
 // user-data folder (has a "Presets" or "Projects" subfolder) wins:
 //   1. explicit override (set from ConfigManager / a settings UI)
-//   2. registry  HKCU\Software\Image-Line\Shared\Paths  (best-effort; value names
-//      vary between FL versions, so every string value ending in "FL Studio" or
-//      pointing at an existing folder with the right shape is considered)
+//   2. registry  Software\Image-Line\Shared\Paths, value "Shared data" (via Discovery),
+//      then the per-version "FL Studio <n>" keys
 //   3. <userDocumentsDirectory>\Image-Line\FL Studio   (resolves OneDrive redirection)
 class UserDataLocator
 {

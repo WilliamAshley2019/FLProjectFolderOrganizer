@@ -1,4 +1,10 @@
 #include "FLInstallationScanner.h"
+#include "Discovery.h"
+
+#if JUCE_WINDOWS
+ #include <windows.h>
+ #include <tlhelp32.h>
+#endif
 
 std::vector<FLInstallationScanner::Installation> FLInstallationScanner::ScanForInstallations()
 {
@@ -19,6 +25,26 @@ std::vector<FLInstallationScanner::Installation> FLInstallationScanner::ScanForI
 
     for (const auto& root : rootsToCheck)
         ScanProgramFilesRoot(root, results);
+
+    // Installs outside Program Files (custom drive/folder) are found via the registry.
+    for (const auto& candidate : Discovery::registryCandidates(Discovery::Kind::FlInstall))
+    {
+        const auto folder = candidate.path;
+        const bool known = std::any_of(results.begin(), results.end(), [&](const Installation& i)
+            { return i.installFolder.getFullPathName().equalsIgnoreCase(folder.getFullPathName()); });
+        if (known)
+            continue;
+
+        Installation install;
+        install.folderName     = folder.getFileName();
+        install.installFolder  = folder;
+        install.executablePath = folder.getChildFile("FL64.exe");
+        install.versionLabel   = folder.getFileName();
+        install.majorVersion   = ExtractMajorVersionFromFolderName(install.folderName);
+        install.registryConfirmed = true;
+        if (install.executablePath.existsAsFile())
+            results.push_back(install);
+    }
 
     // Sort newest-first so the UI can show the most relevant version up top.
     std::sort(results.begin(), results.end(),
@@ -111,23 +137,196 @@ bool FLInstallationScanner::ConfirmViaRegistry(Installation& install)
    #endif
 }
 
-bool FLInstallationScanner::LaunchInstallation(const Installation& install, const juce::File& projectToOpen)
+#if JUCE_WINDOWS
+namespace
+{
+    using LogFn = std::function<void(const juce::String&)>;
+
+    // pids of running processes whose image path is exactly `exe` (case-insensitive)
+    std::vector<DWORD> pidsRunningExe(const juce::File& exe)
+    {
+        std::vector<DWORD> pids;
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE)
+            return pids;
+
+        PROCESSENTRY32W pe {};
+        pe.dwSize = sizeof(pe);
+        const auto wanted = exe.getFullPathName();
+        if (Process32FirstW(snap, &pe))
+        {
+            do
+            {
+                if (juce::String(pe.szExeFile).equalsIgnoreCase(exe.getFileName()))
+                {
+                    if (HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID))
+                    {
+                        wchar_t buf[MAX_PATH * 2] {};
+                        DWORD len = (DWORD) std::size(buf);
+                        if (QueryFullProcessImageNameW(h, 0, buf, &len) && juce::String(buf).equalsIgnoreCase(wanted))
+                            pids.push_back(pe.th32ProcessID);
+                        CloseHandle(h);
+                    }
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+        return pids;
+    }
+
+    // Starts `exe` with an optional project argument, working directory = the exe's own folder.
+    // Returns the new process handle (caller closes it) or nullptr.
+    HANDLE startExe(const juce::File& exe, const juce::File& project, DWORD* pidOut = nullptr)
+    {
+        juce::String cmd = "\"" + exe.getFullPathName() + "\"";
+        if (project.existsAsFile())
+            cmd += " \"" + project.getFullPathName() + "\"";
+
+        std::wstring cmdLine(cmd.toWideCharPointer());     // CreateProcessW may modify the buffer
+        const auto dir = exe.getParentDirectory().getFullPathName();
+
+        STARTUPINFOW si {};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi {};
+        if (! CreateProcessW(exe.getFullPathName().toWideCharPointer(), cmdLine.data(), nullptr, nullptr, FALSE,
+                             0, nullptr, dir.toWideCharPointer(), &si, &pi))
+            return nullptr;
+
+        if (pidOut != nullptr) *pidOut = pi.dwProcessId;
+        CloseHandle(pi.hThread);
+        return pi.hProcess;
+    }
+
+    struct WindowProbe { DWORD pid; juce::String title; };
+
+    BOOL CALLBACK probeWindow(HWND hwnd, LPARAM lp)
+    {
+        auto* probe = reinterpret_cast<WindowProbe*>(lp);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != probe->pid || ! IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != nullptr)
+            return TRUE;
+        wchar_t title[512] {};
+        if (GetWindowTextW(hwnd, title, (int) std::size(title)) > 0)
+        {
+            juce::String t(title);
+            if (t.containsIgnoreCase("FL Studio") || t.containsIgnoreCase("FruityLoops"))
+            {
+                probe->title = t;
+                return FALSE;           // found the main window
+            }
+        }
+        return TRUE;
+    }
+
+    // Watches a freshly launched FL. FL only picks up a command-line project once it has
+    // finished starting, and sometimes starts empty; if its title bar still doesn't show the
+    // project after it has settled, send the project once more (an already-running FL takes
+    // it directly). Owns itself via DeletedAtShutdown so it can't outlive the message thread.
+    class LaunchWatcher : private juce::Timer, public juce::DeletedAtShutdown
+    {
+    public:
+        LaunchWatcher(juce::File exeIn, juce::File projectIn, HANDLE proc, DWORD pidIn, LogFn logIn)
+            : exe(std::move(exeIn)), project(std::move(projectIn)), process(proc), pid(pidIn), log(std::move(logIn))
+        {
+            startTimer(500);
+        }
+        ~LaunchWatcher() override { stopTimer(); if (process) CloseHandle(process); }
+
+    private:
+        void say(const juce::String& m) { if (log) log(m); }
+
+        void finish() { stopTimer(); juce::MessageManager::callAsync([this] { delete this; }); }
+
+        void timerCallback() override
+        {
+            ticks++;
+
+            if (process != nullptr && WaitForSingleObject(process, 0) == WAIT_OBJECT_0 && ! sawWindow)
+            {
+                say("The new FL process exited without opening a window. FL is probably single-instance and "
+                    "handed the project to a copy that was already running (check which FL Studio opened it).");
+                return finish();
+            }
+
+            WindowProbe probe { pid, {} };
+            EnumWindows(probeWindow, reinterpret_cast<LPARAM>(&probe));
+
+            if (probe.title.isNotEmpty())
+            {
+                if (! sawWindow) { sawWindow = true; windowSeenAtTick = ticks; }
+                lastTitle = probe.title;
+            }
+
+            if (! sawWindow)
+            {
+                if (ticks > 180) { say("Gave up waiting for FL's window (90 s)."); finish(); }
+                return;
+            }
+
+            if (ticks - windowSeenAtTick < 10)      // let FL finish starting (~5 s) before judging
+                return;
+
+            const bool loaded = project.getFileNameWithoutExtension().isNotEmpty()
+                             && lastTitle.containsIgnoreCase(project.getFileNameWithoutExtension());
+            if (loaded)
+                say("FL is showing \"" + lastTitle + "\" - project loaded.");
+            else if (HANDLE h = startExe(exe, project))
+            {
+                CloseHandle(h);
+                say("FL started without the project (title: \"" + lastTitle + "\"); sent it again.");
+            }
+            finish();
+        }
+
+        juce::File exe, project;
+        HANDLE process;
+        DWORD pid;
+        LogFn log;
+        int ticks = 0, windowSeenAtTick = 0;
+        bool sawWindow = false;
+        juce::String lastTitle;
+    };
+}
+#endif
+
+bool FLInstallationScanner::LaunchInstallation(const Installation& install, const juce::File& projectToOpen,
+                                               std::function<void(const juce::String&)> log)
 {
     if (!install.executablePath.existsAsFile())
         return false;
 
-    // File::startAsProcess() wraps the OS's native "launch this" call
-    // (ShellExecute on Windows) and is the standard JUCE way to fire off
-    // an external application without keeping a handle to monitor it --
-    // unlike juce::ChildProcess, which is meant for processes whose
-    // lifetime/output you intend to track from this app, and whose
-    // stack-object destruction semantics are not what we want here for
-    // a simple "open FL Studio" action.
+   #if JUCE_WINDOWS
+    const auto running = pidsRunningExe(install.executablePath);
+
+    DWORD pid = 0;
+    HANDLE proc = startExe(install.executablePath, projectToOpen, &pid);
+    if (proc == nullptr)
+        return false;
+
+    if (! running.empty())
+    {
+        // The same exe is already open: the new process just forwards the file to it and exits.
+        if (log) log(install.versionLabel + " is already running; sent it the project.");
+        CloseHandle(proc);
+        return true;
+    }
+
+    if (log)
+        log("Started " + install.versionLabel + " (pid " + juce::String((int) pid)
+            + "); waiting for it to finish loading before checking the project.");
+
+    if (projectToOpen.existsAsFile())
+        new LaunchWatcher(install.executablePath, projectToOpen, proc, pid, std::move(log));   // takes ownership of proc
+    else
+        CloseHandle(proc);
+    return true;
+   #else
     juce::String params;
     if (projectToOpen.existsAsFile())
         params = "\"" + projectToOpen.getFullPathName() + "\"";
-
     return install.executablePath.startAsProcess(params);
+   #endif
 }
 
 bool FLInstallationScanner::OpenInstallFolderInExplorer(const Installation& install)

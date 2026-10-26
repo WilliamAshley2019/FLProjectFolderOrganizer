@@ -139,18 +139,16 @@ PluginDatabaseComponent::PluginDatabaseComponent()
 
     addAndMakeVisible(rescanBtn);
     rescanBtn.setButtonText("Rescan");
-    rescanBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00)); // phosphor orange
+    rescanBtn.getProperties().set("primary", true);
     rescanBtn.onClick = [this] { refreshFromDisk(); };
 
     addAndMakeVisible(exportCsvBtn);
     exportCsvBtn.setButtonText("Export CSV");
-    exportCsvBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF44AA44));
-    exportCsvBtn.onClick = [this] { exportCSV(); };
+        exportCsvBtn.onClick = [this] { exportCSV(); };
 
     addAndMakeVisible(importCsvBtn);
     importCsvBtn.setButtonText("Import CSV");
-    importCsvBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFAA44FF));
-    importCsvBtn.onClick = [this] { importCSV(); };
+        importCsvBtn.onClick = [this] { importCSV(); };
 
     addAndMakeVisible(table);
     tableModel = std::make_unique<TableModel>(*this);
@@ -165,8 +163,6 @@ PluginDatabaseComponent::PluginDatabaseComponent()
 
     refreshFromDisk();
 }
-
-PluginDatabaseComponent::~PluginDatabaseComponent() = default;
 
 void PluginDatabaseComponent::resized()
 {
@@ -191,6 +187,36 @@ void PluginDatabaseComponent::resized()
     table.setBounds(bounds);
 }
 
+class PluginDatabaseComponent::ScanThread : public juce::Thread
+{
+public:
+    ScanThread(juce::File rootIn, std::function<void(std::vector<PluginDatabaseManager::PluginEntry>)> doneIn)
+        : juce::Thread("PluginDatabaseScan"), root(std::move(rootIn)), done(std::move(doneIn)) {}
+
+    ~ScanThread() override
+    {
+        manager.cancelScan = true;
+        stopThread(20000);
+    }
+
+    void run() override
+    {
+        auto results = std::make_shared<std::vector<PluginDatabaseManager::PluginEntry>>(manager.ScanDatabase(root));
+        if (threadShouldExit() || manager.cancelScan.load())
+            return;
+
+        auto callback = done;
+        juce::MessageManager::callAsync([callback, results] { callback(std::move(*results)); });
+    }
+
+private:
+    juce::File root;
+    PluginDatabaseManager manager;     // own instance: nothing shared with the UI thread
+    std::function<void(std::vector<PluginDatabaseManager::PluginEntry>)> done;
+};
+
+PluginDatabaseComponent::~PluginDatabaseComponent() = default;
+
 void PluginDatabaseComponent::refreshFromDisk()
 {
     auto root = PluginDatabaseManager::GetDefaultDatabaseRoot();
@@ -205,7 +231,51 @@ void PluginDatabaseComponent::refreshFromDisk()
         return;
     }
 
-    allRows = databaseManager.ScanDatabase(root);
+    if (scanThread != nullptr)          // a scan is already running: run one more after it
+    {
+        rescanQueued = true;
+        return;
+    }
+
+    statusLabel.setText("Scanning plugin database...", juce::dontSendNotification);
+    rescanBtn.setEnabled(false);
+
+    juce::Component::SafePointer<PluginDatabaseComponent> safe(this);
+    scanThread = std::make_unique<ScanThread>(root,
+        [safe](std::vector<PluginDatabaseManager::PluginEntry> results)
+        {
+            if (safe != nullptr)
+                safe->onScanFinished(std::move(results));
+        });
+    scanThread->startThread();
+}
+
+void PluginDatabaseComponent::onScanFinished(std::vector<PluginDatabaseManager::PluginEntry> results)
+{
+    allRows = std::move(results);
+    scanThread.reset();                 // run() has already handed over its results
+    rescanBtn.setEnabled(true);
+    applySourceFilter();
+
+    if (rescanQueued)
+    {
+        rescanQueued = false;
+        refreshFromDisk();
+    }
+}
+
+juce::String PluginDatabaseComponent::keyOf(const PluginDatabaseManager::PluginEntry& e)
+{
+    return e.source == PluginDatabaseManager::EntrySource::Installed
+        ? e.sourceIniFile.getFullPathName() + "|" + e.sectionPath
+        : e.fstFile.getFullPathName();
+}
+
+void PluginDatabaseComponent::replaceCachedEntry(const juce::String& oldKey,
+                                                 const PluginDatabaseManager::PluginEntry& updated)
+{
+    for (auto& e : allRows)
+        if (keyOf(e) == oldKey) { e = updated; break; }
     applySourceFilter();
 }
 
@@ -226,7 +296,11 @@ void PluginDatabaseComponent::applySourceFilter()
             tableModel->rows.push_back(entry);
     }
 
+    if (table.getHeader().getSortColumnId() > 0)
+        tableModel->sortOrderChanged(table.getHeader().getSortColumnId(),
+                                     table.getHeader().isSortedForwards());
     table.updateContent();
+    table.repaint();
 
     int installedCount = 0, favoritesCount = 0;
     for (const auto& entry : allRows)
@@ -293,10 +367,12 @@ void PluginDatabaseComponent::showRowContextMenu(int rowNumber, juce::Point<int>
                     ? PluginDatabaseManager::PluginType::Effect
                     : PluginDatabaseManager::PluginType::Generator;
 
+                const auto oldKey = keyOf(entry);
                 if (databaseManager.ReclassifyEntry(entry, newType))
                 {
-                    statusLabel.setText("Reclassified " + entry.name, juce::dontSendNotification);
-                    refreshFromDisk();
+                    const auto updated = entry;      // applySourceFilter() rebuilds the rows
+                    statusLabel.setText("Reclassified " + updated.name, juce::dontSendNotification);
+                    replaceCachedEntry(oldKey, updated);
                 }
                 else
                 {
@@ -377,16 +453,18 @@ void PluginDatabaseComponent::cycleEntryType(int rowNumber)
         ? PluginDatabaseManager::PluginType::Effect
         : PluginDatabaseManager::PluginType::Generator;
 
+    const auto oldKey = keyOf(entry);
     bool ok = (entry.source == PluginDatabaseManager::EntrySource::Installed)
         ? databaseManager.ReclassifyInstalledEntry(entry, newType)
         : databaseManager.ReclassifyEntry(entry, newType);
 
     if (ok)
     {
-        statusLabel.setText("Reclassified " + entry.name + " -> " +
+        const auto updated = entry;          // applySourceFilter() rebuilds the rows
+        statusLabel.setText("Reclassified " + updated.name + " -> " +
             (newType == PluginDatabaseManager::PluginType::Generator ? "Generator" : "Effect"),
             juce::dontSendNotification);
-        refreshFromDisk();
+        replaceCachedEntry(oldKey, updated);
     }
     else
     {
@@ -587,8 +665,7 @@ PluginEntryEditorComponent::PluginEntryEditorComponent(PluginDatabaseManager& ma
 
     addAndMakeVisible(saveBtn);
     saveBtn.setButtonText("Save (writes to .Plugins.ini)");
-    saveBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
-    saveBtn.onClick = [this] { doSave(); };
+        saveBtn.onClick = [this] { doSave(); };
 
     addAndMakeVisible(cancelBtn);
     cancelBtn.setButtonText("Cancel");
@@ -703,8 +780,7 @@ NfoEditorComponent::NfoEditorComponent(PluginDatabaseManager::PluginEntry entryI
     {
         addAndMakeVisible(saveBtn);
         saveBtn.setButtonText("Save");
-        saveBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
-        saveBtn.onClick = [this]
+                saveBtn.onClick = [this]
         {
             PluginDatabaseManager::WriteNfoRawText(entry, textEditor.getText());
             if (closeRequested)

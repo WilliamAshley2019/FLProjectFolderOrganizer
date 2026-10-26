@@ -38,7 +38,16 @@ public:
     // Launches FL Studio for a specific installation, optionally opening
     // a project file directly. Returns false if the executable can't be
     // found or launched.
-    static bool LaunchInstallation(const Installation& install, const juce::File& projectToOpen = {});
+    //
+    // On Windows this starts the exact executable with its own install folder as the working
+    // directory (so it never inherits the host FL Studio's folder), notes whether a copy of
+    // that same exe is already running (in which case FL hands the project to it), and, for a
+    // fresh start, watches the new instance and re-sends the project once if FL came up
+    // without loading it. `log` receives short progress lines on the message thread; it may
+    // be called after this function returns, so it must be safe to call late (capture a
+    // SafePointer, not a raw pointer).
+    static bool LaunchInstallation(const Installation& install, const juce::File& projectToOpen = {},
+                                   std::function<void(const juce::String&)> log = {});
 
     // Opens the install folder in Windows Explorer.
     static bool OpenInstallFolderInExplorer(const Installation& install);

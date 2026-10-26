@@ -1,12 +1,24 @@
 #pragma once
 #include <JuceHeader.h>
+#include "flp.h"   // at the top of PluginProcessor.h, for FL::Project
+
 
 class FLProjectOrganizerProcessor : public juce::AudioProcessor
 {
 public:
     FLProjectOrganizerProcessor();
     ~FLProjectOrganizerProcessor() override;
+    // inside FLProjectOrganizerProcessor's public section:
+    template <typename Fn>
+    int withProjectLock(Fn&& fn)
+    {
+        const juce::ScopedLock sl(projectLock);
+        return fn(projectPtr.get());
+    }
 
+    bool saveProjectAs(const juce::File& file);
+
+    
     //==============================================================================
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {}
     void releaseResources() override {}
@@ -37,5 +49,8 @@ public:
     bool producesMidi() const override { return false; }
 
 private:
+    // and in the private section:
+    juce::CriticalSection projectLock;
+    std::unique_ptr<FL::Project> projectPtr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FLProjectOrganizerProcessor)
 };

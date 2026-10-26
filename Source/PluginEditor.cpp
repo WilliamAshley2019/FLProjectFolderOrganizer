@@ -1,5 +1,8 @@
 #include "PluginEditor.h"
+#include "SampleUsageIndexer.h"
+#include "InstalledPluginLookup.h"
 #include "RecycleBinManager.h"
+#include "ContentRoutingWindow.h"
 
 // ============================================================================
 // Result Table Model Implementation
@@ -13,9 +16,18 @@ int FLProjectOrganizerEditor::ResultTableModel::getNumRows()
 void FLProjectOrganizerEditor::ResultTableModel::paintRowBackground(
     juce::Graphics& g, int rowNumber, int width, int height, bool rowIsSelected)
 {
-    auto bg = rowIsSelected ? juce::Colour(0xFF2A2A3A) :
-        (rowNumber % 2 ? juce::Colour(0xFF222222) : juce::Colour(0xFF1A1A1A));
-    g.fillAll(bg);
+    if (rowIsSelected)
+    {
+        g.setColour(flo::ui::col::accent.withAlpha(0.20f));
+        g.fillRect(0, 0, width, height);
+        g.setColour(flo::ui::col::accent);
+        g.fillRect(0, 2, 3, height - 4);
+    }
+    else if (rowNumber % 2)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.025f));
+        g.fillRect(0, 0, width, height);
+    }
 }
 
 void FLProjectOrganizerEditor::ResultTableModel::paintCell(
@@ -44,8 +56,8 @@ void FLProjectOrganizerEditor::ResultTableModel::paintCell(
     default: break;
     }
 
-    g.setColour(rowIsSelected ? juce::Colours::white : juce::Colours::lightgrey);
-    g.setFont(juce::Font(juce::FontOptions(14.0f)));
+    g.setColour(rowIsSelected ? flo::ui::col::text : flo::ui::col::textDim.brighter(0.25f));
+    g.setFont(flo::ui::sans(13.0f));
     g.drawText(text, 4, 0, width - 8, height, juce::Justification::centredLeft);
 }
 
@@ -91,18 +103,21 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 {
     lnf = std::make_unique<FLPLookAndFeel>();
     setLookAndFeel(lnf.get());
+    addAndMakeVisible(chassis);          // brushed-metal backdrop, behind every other child
+    addAndMakeVisible(lcd);
     setSize(1100, 800);
 
     // Title
     addAndMakeVisible(titleLabel);
     titleLabel.setText("FL Project Organizer", juce::dontSendNotification);
-    titleLabel.setFont(juce::Font(juce::FontOptions(28.0f, juce::Font::bold)));
-    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    titleLabel.setText("FL PROJECT ORGANIZER", juce::dontSendNotification);
+    titleLabel.setFont(flo::ui::caps(22.0f));
+    titleLabel.setColour(juce::Label::textColourId, flo::ui::col::text);
 
     addAndMakeVisible(versionLabel);
     versionLabel.setText("v1.0.4", juce::dontSendNotification);
-    versionLabel.setFont(juce::Font(juce::FontOptions(14.0f)));
-    versionLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
+    versionLabel.setFont(flo::ui::caps(11.0f));
+    versionLabel.setColour(juce::Label::textColourId, flo::ui::col::accent);
 
     // Source path
     addAndMakeVisible(sourceLabel);
@@ -165,33 +180,29 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     // Action buttons
     addAndMakeVisible(scanBtn);
     scanBtn.setButtonText("Scan");
-    scanBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF4488FF));
+    scanBtn.getProperties().set("primary", true);
     scanBtn.onClick = [this] { startScan(); };
 
     addAndMakeVisible(organizeBtn);
     organizeBtn.setButtonText("Organize");
-    organizeBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF8800));
+    organizeBtn.getProperties().set("primary", true);
     organizeBtn.onClick = [this] { startOrganize(); };
 
     addAndMakeVisible(stopBtn);
     stopBtn.setButtonText("Stop");
-    stopBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF4444));
-    stopBtn.onClick = [this] { stopOperation(); };
+        stopBtn.onClick = [this] { stopOperation(); };
     stopBtn.setEnabled(false);
 
     addAndMakeVisible(exportCSVBtn);
     exportCSVBtn.setButtonText("Export CSV");
-    exportCSVBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF44AA44));
-    exportCSVBtn.onClick = [this] { exportCSV(); };
+        exportCSVBtn.onClick = [this] { exportCSV(); };
 
     addAndMakeVisible(undoBtn);
     undoBtn.setButtonText("Undo Last");
-    undoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFAA44FF));
-    undoBtn.onClick = [this] { undoLastOperation(); };
+        undoBtn.onClick = [this] { undoLastOperation(); };
 
     addAndMakeVisible(pluginDbBtn);
     pluginDbBtn.setButtonText("Plugin Database");
-    pluginDbBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00)); // phosphor orange
     // PluginDatabaseWindow deletes itself in closeButtonPressed() -- standard
     // JUCE idiom for a non-modal, self-owned top-level window launched from
     // a button click.
@@ -199,8 +210,7 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 
     addAndMakeVisible(protectedFilesBtn);
     protectedFilesBtn.setButtonText("Protected Files");
-    protectedFilesBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF4444));
-    protectedFilesBtn.onClick = [this]
+        protectedFilesBtn.onClick = [this]
     {
         auto* win = new ProtectedFilesWindow();
         win->SetEntries(protectedFilesFound);
@@ -208,8 +218,19 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 
     addAndMakeVisible(sampleScannerBtn);
     sampleScannerBtn.setButtonText("Sample Scanner");
-    sampleScannerBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
-    sampleScannerBtn.onClick = [this] { new SampleScannerWindow(); };
+        sampleScannerBtn.onClick = [this] { new SampleScannerWindow(); };
+
+    addAndMakeVisible(indexSamplesBtn);
+    indexSamplesBtn.setButtonText("Index Samples");
+        indexSamplesBtn.onClick = [this] { startSampleIndexing(); };
+
+    addAndMakeVisible(findSampleUsersBtn);
+    findSampleUsersBtn.setButtonText("Find Sample Users...");
+        findSampleUsersBtn.onClick = [this] { promptFindSampleUsers(); };
+
+    addAndMakeVisible(importContentBtn);
+    importContentBtn.setButtonText("Import Content...");
+        importContentBtn.onClick = [this] { new ContentRoutingWindow(); };   // deletes itself on close
 
     // Status and progress
     addAndMakeVisible(statusLabel);
@@ -248,6 +269,7 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
         .getChildFile("projects.db");
     dbFile.getParentDirectory().createDirectory();
 
+    databaseFile = dbFile;
     dbInitialized = database.Initialize(dbFile);
     if (dbInitialized)
         sendLog("Database initialized: " + dbFile.getFullPathName());
@@ -271,11 +293,17 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     // "Open With" / "Open Install Folder" context menu.
     refreshInstalledVersions();
 
+    // Parse FL's plugin database once, off the message thread, so the first
+    // project inspection doesn't stall.
+    InstalledPluginLookup::getInstance().warmUp();
+
     startTimerHz(30);
 }
 
 FLProjectOrganizerEditor::~FLProjectOrganizerEditor()
 {
+    if (sampleIndexThread != nullptr)
+        sampleIndexThread->stopThread(10000);
     setLookAndFeel(nullptr);
     if (scanner)
         scanner->StopScanning();
@@ -283,39 +311,44 @@ FLProjectOrganizerEditor::~FLProjectOrganizerEditor()
 
 void FLProjectOrganizerEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+    g.fillAll(flo::ui::col::bg);
 }
 
 void FLProjectOrganizerEditor::resized()
 {
+    chassis.setBounds(getLocalBounds());
     auto bounds = getLocalBounds().reduced(20);
 
-    // Title
-    auto header = bounds.removeFromTop(50);
-    titleLabel.setBounds(header.removeFromLeft(350));
-    versionLabel.setBounds(header.removeFromLeft(80).withY(header.getY() + 10));
+    // Header: engraved title on the left, LCD on the right
+    auto header = bounds.removeFromTop(62);
+    lcd.setBounds(header.removeFromRight(juce::jmin(460, header.getWidth() / 2)));
+    header.removeFromRight(16);
+    titleLabel.setBounds(header.removeFromTop(36));
+    versionLabel.setBounds(header.removeFromTop(18));
 
     bounds.removeFromTop(10);
 
-    // Source/Destination
-    auto sourceRow = bounds.removeFromTop(30);
-    sourceLabel.setBounds(sourceRow.removeFromLeft(120));
-    sourcePathEditor.setBounds(sourceRow.removeFromLeft(sourceRow.getWidth() - 100));
+    // Source / destination plate
+    auto pathPlate = bounds.removeFromTop(30 + 5 + 30 + 20);
+    auto pathArea = pathPlate.reduced(12, 10);
+    auto sourceRow = pathArea.removeFromTop(30);
+    sourceLabel.setBounds(sourceRow.removeFromLeft(130));
     browseSourceBtn.setBounds(sourceRow.removeFromRight(90));
-
-    bounds.removeFromTop(5);
-
-    auto destRow = bounds.removeFromTop(30);
-    destLabel.setBounds(destRow.removeFromLeft(120));
-    destPathEditor.setBounds(destRow.removeFromLeft(destRow.getWidth() - 100));
+    sourceRow.removeFromRight(8);
+    sourcePathEditor.setBounds(sourceRow);
+    pathArea.removeFromTop(5);
+    auto destRow = pathArea.removeFromTop(30);
+    destLabel.setBounds(destRow.removeFromLeft(130));
     browseDestBtn.setBounds(destRow.removeFromRight(90));
+    destRow.removeFromRight(8);
+    destPathEditor.setBounds(destRow);
 
     bounds.removeFromTop(10);
 
     // Options
     auto optionsRow = bounds.removeFromTop(80);
     optionsGroup.setBounds(optionsRow);
-    optionsRow = optionsRow.reduced(10, 20);
+    optionsRow = optionsRow.reduced(10, 24);
 
     auto toggleWidth = 160;
     includeZipsToggle.setBounds(optionsRow.removeFromLeft(toggleWidth));
@@ -324,14 +357,16 @@ void FLProjectOrganizerEditor::resized()
     optionsRow.removeFromLeft(10);
     dryRunToggle.setBounds(optionsRow.removeFromLeft(toggleWidth));
     optionsRow.removeFromLeft(10);
-    deleteOriginalsToggle.setBounds(optionsRow.removeFromLeft(toggleWidth));
+    deleteOriginalsToggle.setBounds(optionsRow.removeFromLeft(toggleWidth + 20));
     optionsRow.removeFromLeft(10);
-    verifyCopiesToggle.setBounds(optionsRow.removeFromLeft(toggleWidth));
+    verifyCopiesToggle.setBounds(optionsRow.removeFromLeft(toggleWidth + 20));
 
     bounds.removeFromTop(10);
 
-    // Action buttons -- primary row
-    auto buttonRow = bounds.removeFromTop(40);
+    // Action row on one plate
+    auto actionPlate = bounds.removeFromTop(40 + 8 + 36 + 20);
+    auto actionArea = actionPlate.reduced(12, 10);
+    auto buttonRow = actionArea.removeFromTop(40);
     scanBtn.setBounds(buttonRow.removeFromLeft(100));
     buttonRow.removeFromLeft(10);
     organizeBtn.setBounds(buttonRow.removeFromLeft(100));
@@ -343,27 +378,38 @@ void FLProjectOrganizerEditor::resized()
     undoBtn.setBounds(buttonRow.removeFromLeft(100));
     buttonRow.removeFromLeft(20);
     statusLabel.setBounds(buttonRow.removeFromLeft(200));
-    progressBar.setBounds(buttonRow.removeFromLeft(buttonRow.getWidth()));
+    progressBar.setBounds(buttonRow.reduced(0, 6));
 
-    bounds.removeFromTop(8);
+    actionArea.removeFromTop(8);
 
-    // Secondary row -- tool-launch buttons
-    auto toolRow = bounds.removeFromTop(36);
-    pluginDbBtn.setBounds(toolRow.removeFromLeft(140));
-    toolRow.removeFromLeft(10);
-    protectedFilesBtn.setBounds(toolRow.removeFromLeft(180));
-    toolRow.removeFromLeft(10);
-    sampleScannerBtn.setBounds(toolRow.removeFromLeft(160));
+    // Tool row
+    auto toolRow = actionArea.removeFromTop(36);
+    pluginDbBtn.setBounds(toolRow.removeFromLeft(130));
+    toolRow.removeFromLeft(8);
+    protectedFilesBtn.setBounds(toolRow.removeFromLeft(150));
+    toolRow.removeFromLeft(8);
+    sampleScannerBtn.setBounds(toolRow.removeFromLeft(140));
+    toolRow.removeFromLeft(8);
+    indexSamplesBtn.setBounds(toolRow.removeFromLeft(120));
+    toolRow.removeFromLeft(8);
+    findSampleUsersBtn.setBounds(toolRow.removeFromLeft(160));
+    toolRow.removeFromLeft(8);
+    importContentBtn.setBounds(toolRow.removeFromLeft(150));
 
     bounds.removeFromTop(10);
 
-    // Results table and log
+    // Results table and log, each in a glass well
     auto split = bounds;
-    auto tableArea = split.removeFromTop(split.getHeight() * 0.6f);
-    resultTable.setBounds(tableArea);
+    auto tableArea = split.removeFromTop((int)(split.getHeight() * 0.6f));
+    resultTable.setBounds(tableArea.reduced(2));
 
-    split.removeFromTop(5);
-    logBox.setBounds(split);
+    split.removeFromTop(8);
+    logBox.setBounds(split.reduced(2));
+
+    chassis.plates = { pathPlate.toFloat(), actionPlate.toFloat() };
+    chassis.wells = { tableArea.toFloat(), split.toFloat() };
+    chassis.headers.clear();
+    chassis.repaint();
 }
 
 void FLProjectOrganizerEditor::timerCallback()
@@ -731,6 +777,19 @@ void FLProjectOrganizerEditor::refreshDatabaseView()
     }
 
     statusLabel.setText(juce::String(projects.size()) + " projects in database", juce::dontSendNotification);
+
+    int zipped = 0;
+    for (auto& p : projects) zipped += p.isZipped ? 1 : 0;
+    updateLcd((int)projects.size(), zipped);
+}
+
+void FLProjectOrganizerEditor::updateLcd(int projectCount, int zippedCount)
+{
+    lcdProjects = projectCount;
+    lcdZipped = zippedCount;
+    lcd.set({ { "PROJECTS", juce::String(juce::jmin(projectCount, 99999)).paddedLeft('0', 4), 1.4f },
+              { "IN ZIPS", juce::String(juce::jmin(zippedCount, 9999)).paddedLeft('0', 3), 1.0f },
+              { "FL INSTALLS", juce::String(juce::jmin((int)installedVersions.size(), 99)).paddedLeft('0', 2), 1.0f } });
 }
 
 // ============================================================================
@@ -763,7 +822,7 @@ void FLProjectOrganizerEditor::undoLastOperation()
         return;
     }
 
-    auto& last = transactions.back();
+    auto& last = transactions.front();   // GetTransactions() is newest-first
     if (database.UndoTransaction(last.id))
     {
         sendLog("Undid: " + last.action + " (" + last.sourcePath + ")");
@@ -782,6 +841,7 @@ void FLProjectOrganizerEditor::undoLastOperation()
 void FLProjectOrganizerEditor::refreshInstalledVersions()
 {
     installedVersions = installScanner.ScanForInstallations();
+    updateLcd(lcdProjects, lcdZipped);     // keep the last known counts; only the install count changed
 
     if (installedVersions.empty())
     {
@@ -799,6 +859,17 @@ void FLProjectOrganizerEditor::refreshInstalledVersions()
 // ============================================================================
 // Right-Click Context Menu for Result Table Rows (Phase 3)
 // ============================================================================
+std::function<void(const juce::String&)> FLProjectOrganizerEditor::makeLaunchLog()
+{
+    // The launcher keeps reporting for a while after the menu closes, so never capture a raw `this`.
+    juce::Component::SafePointer<FLProjectOrganizerEditor> safe(this);
+    return [safe](const juce::String& message)
+    {
+        if (safe != nullptr)
+            safe->sendLog(message);
+    };
+}
+
 void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int> screenPosition)
 {
     if (rowNumber < 0 || rowNumber >= (int)tableModel->displayRows.size())
@@ -817,7 +888,13 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
         menu.addItem(96, "SHA-256: " + entry.hash.substring(0, 16) + "...", false);
     menu.addSeparator();
 
-    menu.addItem(1, "Open Containing Folder");
+    menu.addItem(1, "Show in Explorer");
+    menu.addItem(10, "Copy Path");
+    if (entry.hash.isNotEmpty())
+        menu.addItem(11, "Copy SHA-256");
+    if (!entry.isZipped)
+        menu.addItem(12, "Open with Windows default (file association)");
+    menu.addSeparator();
 
     // Best-match FL Studio version, if any installs were found
     const FLInstallationScanner::Installation* bestMatch = nullptr;
@@ -854,19 +931,34 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
         juce::Rectangle<int>(screenPosition, screenPosition)),
-        [this, projectFile, bestMatch](int result)
+        [this, projectFile, bestMatch, entryHash = entry.hash](int result)
         {
             if (result == 0)
                 return;
 
             if (result == 1)
             {
-                projectFile.getParentDirectory().startAsProcess();
+                if (projectFile.exists()) projectFile.revealToUser();
+                else projectFile.getParentDirectory().startAsProcess();
+            }
+            else if (result == 10)
+            {
+                juce::SystemClipboard::copyTextToClipboard(projectFile.getFullPathName());
+            }
+            else if (result == 11)
+            {
+                juce::SystemClipboard::copyTextToClipboard(entryHash);
+            }
+            else if (result == 12)
+            {
+                // Whatever Windows has registered for .flp (usually the most recently installed FL).
+                if (!projectFile.startAsProcess())
+                    sendLog("Windows could not open " + projectFile.getFileName() + " with its default program.");
             }
             else if (result == 2 && bestMatch != nullptr)
             {
                 sendLog("Attempting to launch: " + bestMatch->executablePath.getFullPathName());
-                if (!FLInstallationScanner::LaunchInstallation(*bestMatch, projectFile))
+                if (!FLInstallationScanner::LaunchInstallation(*bestMatch, projectFile, makeLaunchLog()))
                     sendLog("Failed to launch " + bestMatch->versionLabel +
                         " -- executable not found or failed to start at: " +
                         bestMatch->executablePath.getFullPathName());
@@ -887,7 +979,7 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
                     if (seen == index)
                     {
                         sendLog("Attempting to launch: " + v.executablePath.getFullPathName());
-                        if (!FLInstallationScanner::LaunchInstallation(v, projectFile))
+                        if (!FLInstallationScanner::LaunchInstallation(v, projectFile, makeLaunchLog()))
                             sendLog("Failed to launch " + v.versionLabel +
                                 " -- executable not found or failed to start at: " +
                                 v.executablePath.getFullPathName());
@@ -899,4 +991,92 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
                 }
             }
         });
+}
+
+// ============================================================================
+// Sample usage index
+// ============================================================================
+namespace
+{
+    // Runs on its own thread with its OWN sqlite connection to the same WAL
+    // database, so it never interleaves transactions with the UI thread's handle.
+    class SampleIndexThread : public juce::Thread
+    {
+    public:
+        SampleIndexThread(const juce::File& dbFile, std::function<void(const juce::String&)> logFn,
+                          std::function<void()> doneFn)
+            : juce::Thread("SampleIndexThread"), file(dbFile), log(std::move(logFn)), done(std::move(doneFn)) {}
+
+        void run() override
+        {
+            ProjectDatabase localDb;
+            if (!localDb.Initialize(file)) { post("Sample index: could not open database."); return finish(); }
+            SampleUsageIndexer indexer(localDb);
+            int lastReported = -10;
+            auto r = indexer.indexAll(false,
+                [&](int i, int total, const juce::String& name)
+                {
+                    if (i - lastReported >= 25 || i == total) { lastReported = i; post("Indexing samples " + juce::String(i) + "/" + juce::String(total) + "  " + name); }
+                },
+                [this] { return threadShouldExit(); });
+            post("Sample index done: " + juce::String(r.indexed) + " indexed (" + juce::String(r.references)
+                 + " references), " + juce::String(r.skipped) + " skipped, " + juce::String(r.failed) + " failed.");
+            finish();
+        }
+    private:
+        void post(const juce::String& m) { auto l = log; juce::MessageManager::callAsync([l, m] { l(m); }); }
+        void finish() { auto d = done; juce::MessageManager::callAsync([d] { d(); }); }
+        juce::File file;
+        std::function<void(const juce::String&)> log;
+        std::function<void()> done;
+    };
+}
+
+void FLProjectOrganizerEditor::startSampleIndexing()
+{
+    if (!dbInitialized) return;
+    if (sampleIndexThread != nullptr)
+    {
+        if (sampleIndexThread->isThreadRunning()) return;
+        sampleIndexThread.reset();
+    }
+    indexSamplesBtn.setEnabled(false);
+    sendLog("Sample index started...");
+    juce::Component::SafePointer<FLProjectOrganizerEditor> safe(this);
+    sampleIndexThread.reset(new SampleIndexThread(databaseFile,
+        [safe](const juce::String& m) { if (safe != nullptr) safe->sendLog(m); },
+        [safe] { if (safe != nullptr) safe->indexSamplesBtn.setEnabled(true); }));
+    sampleIndexThread->startThread();
+}
+
+void FLProjectOrganizerEditor::promptFindSampleUsers()
+{
+    if (!dbInitialized) return;
+    auto* w = new juce::AlertWindow("Find Sample Users",
+        "Enter part of a sample's file name or path (e.g. kick_07.wav):", juce::MessageBoxIconType::QuestionIcon);
+    w->addTextEditor("needle", "", "Sample:");
+    w->addButton("Search", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    juce::Component::SafePointer<FLProjectOrganizerEditor> safe(this);
+    w->enterModalState(true, juce::ModalCallbackFunction::create([safe, w](int result)
+    {
+        auto needle = w->getTextEditorContents("needle").trim();
+        std::unique_ptr<juce::AlertWindow> owner(w);     // modal state ended; we own the window now
+        if (result != 1 || needle.isEmpty() || safe == nullptr) return;
+
+        auto rows = safe->database.FindSampleUsers(needle, true);
+        juce::String msg;
+        if (rows.empty())
+            msg = "No indexed project uses a sample matching \"" + needle + "\".\n\n"
+                  "If projects were added recently, press Index Samples first.";
+        else
+        {
+            juce::StringArray lines;
+            for (int i = 0; i < juce::jmin((int)rows.size(), 40); ++i)
+                lines.add(juce::File(rows[(size_t)i].projectPath).getFileName() + "  -  " + rows[(size_t)i].channelName);
+            msg = juce::String((int)rows.size()) + " reference(s):\n\n" + lines.joinIntoString("\n");
+            if (rows.size() > 40) msg += "\n... and " + juce::String((int)rows.size() - 40) + " more";
+        }
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Sample Users", msg);
+    }), false);
 }

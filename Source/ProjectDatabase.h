@@ -32,6 +32,14 @@ public:
         juce::String details;
     };
 
+    struct SampleUsageRow
+    {
+        juce::String projectPath;
+        juce::String channelName;
+        juce::String samplePath;      // exactly as stored in the FLP
+        juce::String sampleKey;       // normalised for matching (see NormaliseSampleKey)
+    };
+
     ProjectDatabase();
     ~ProjectDatabase();
 
@@ -47,6 +55,17 @@ public:
     std::vector<TransactionRecord> GetTransactions();
     bool AddTransaction(const TransactionRecord& record);
     bool UndoTransaction(int64_t id);
+
+    // ---- Sample usage index (which projects reference which samples) ----
+    // Lower-cases, converts / to \\ and trims, so lookups ignore case/slash style.
+    static juce::String NormaliseSampleKey(const juce::String& path);
+    // Atomically replaces every row for `projectPath`. Rows' projectPath is ignored.
+    bool ReplaceSampleUsage(const juce::String& projectPath, const std::vector<SampleUsageRow>& rows);
+    bool DeleteSampleUsage(const juce::String& projectPath);
+    // Projects whose samples match: exact key, or (if substring) key LIKE %needle%.
+    std::vector<SampleUsageRow> FindSampleUsers(const juce::String& samplePathOrFragment, bool substring);
+    std::vector<SampleUsageRow> GetSampleUsage(const juce::String& projectPath);
+    bool IsProjectIndexed(const juce::String& projectPath);
 
 private:
     sqlite3* db = nullptr;

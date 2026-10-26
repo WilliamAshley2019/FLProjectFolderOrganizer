@@ -1,6 +1,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "FLPLookAndFeel.h"
 
 class FLProjectOrganizerApplication : public juce::JUCEApplication
 {
@@ -13,12 +14,15 @@ public:
 
     void initialise(const juce::String& commandLine) override
     {
+        // App-wide skin so every dialog and window matches the main editor.
+        juce::LookAndFeel::setDefaultLookAndFeel(&skin);
         mainWindow = std::make_unique<MainWindow>(getApplicationName());
     }
 
     void shutdown() override
     {
         mainWindow = nullptr;
+        juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
     }
 
     void systemRequestedQuit() override
@@ -54,6 +58,7 @@ private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
     };
 
+    FLPLookAndFeel skin;
     std::unique_ptr<MainWindow> mainWindow;
 };
 

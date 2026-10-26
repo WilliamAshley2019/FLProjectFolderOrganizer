@@ -70,6 +70,7 @@ private:
     flo::ui::Chassis chassis;
     flo::ui::LcdStrip lcd;
     void updateLcd(int projectCount, int zippedCount);
+    int lcdProjects = 0, lcdZipped = 0;
 
     // Results display
     juce::TableListBox resultTable;
@@ -121,6 +122,7 @@ private:
     void updateResultTable();
     void sendLog(const juce::String& msg);
     void refreshDatabaseView();
+    std::function<void(const juce::String&)> makeLaunchLog();
     void exportCSV();
     void undoLastOperation();
 

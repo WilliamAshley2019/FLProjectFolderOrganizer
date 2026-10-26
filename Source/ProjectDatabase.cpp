@@ -68,6 +68,24 @@ bool ProjectDatabase::CreateTables()
     ExecuteSQL("CREATE INDEX IF NOT EXISTS idx_group   ON projects(group_name)");
     ExecuteSQL("CREATE INDEX IF NOT EXISTS idx_hash    ON projects(hash)");
     if (!ExecuteSQL(createTransactions)) return false;
+    // Added later: tracks transactions already undone. Fails harmlessly if the column exists.
+    ExecuteSQL("ALTER TABLE transactions ADD COLUMN undone INTEGER DEFAULT 0");
+
+    // sample_usage rows die with their project (foreign_keys is ON).
+    const char* createSampleUsage = R"(
+        CREATE TABLE IF NOT EXISTS sample_usage (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_path TEXT NOT NULL REFERENCES projects(path) ON DELETE CASCADE ON UPDATE CASCADE,
+            channel_name TEXT,
+            sample_path  TEXT NOT NULL,
+            sample_key   TEXT NOT NULL
+        )
+    )";
+    if (!ExecuteSQL(createSampleUsage)) return false;
+    ExecuteSQL("CREATE INDEX IF NOT EXISTS idx_usage_key     ON sample_usage(sample_key)");
+    ExecuteSQL("CREATE INDEX IF NOT EXISTS idx_usage_project ON sample_usage(project_path)");
+    // Marker table so IsProjectIndexed can tell "indexed, no samples" from "never indexed".
+    ExecuteSQL("CREATE TABLE IF NOT EXISTS sample_usage_indexed (project_path TEXT PRIMARY KEY REFERENCES projects(path) ON DELETE CASCADE ON UPDATE CASCADE)");
     return true;
 }
 
@@ -304,7 +322,7 @@ std::vector<ProjectDatabase::TransactionRecord> ProjectDatabase::GetTransactions
 
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db,
-        "SELECT * FROM transactions ORDER BY id DESC LIMIT 100",
+        "SELECT id,timestamp,action,source_path,dest_path,success,details FROM transactions WHERE COALESCE(undone,0)=0 ORDER BY id DESC LIMIT 100",
         -1, &stmt, nullptr) != SQLITE_OK)
         return results;
 
@@ -347,9 +365,136 @@ bool ProjectDatabase::UndoTransaction(int64_t id)
         juce::File source(sourcePath);
         juce::File dest(destPath);
 
-        if (dest.existsAsFile())
-            return dest.moveFileTo(source);
+        // Never overwrite a file that has since reappeared at the original path.
+        if (dest.existsAsFile() && !source.existsAsFile())
+        {
+            source.getParentDirectory().createDirectory();
+            if (dest.moveFileTo(source))
+            {
+                sqlite3_stmt* mark = nullptr;
+                if (sqlite3_prepare_v2(db, "UPDATE transactions SET undone=1 WHERE id=?", -1, &mark, nullptr) == SQLITE_OK)
+                {
+                    bindInt64(mark, 1, id);
+                    sqlite3_step(mark);
+                    sqlite3_finalize(mark);
+                }
+                return true;
+            }
+        }
     }
 
     return false; // DELETE cannot be undone without a backup
+}
+
+
+// ─── Sample usage index ─────────────────────────────────────────────────────
+
+juce::String ProjectDatabase::NormaliseSampleKey(const juce::String& path)
+{
+    return path.trim().replaceCharacter('/', '\\').toLowerCase();
+}
+
+bool ProjectDatabase::ReplaceSampleUsage(const juce::String& projectPath, const std::vector<SampleUsageRow>& rows)
+{
+    if (db == nullptr) return false;
+    if (!ExecuteSQL("BEGIN IMMEDIATE")) return false;
+
+    auto rollback = [&] { ExecuteSQL("ROLLBACK"); return false; };
+
+    sqlite3_stmt* del = nullptr;
+    if (sqlite3_prepare_v2(db, "DELETE FROM sample_usage WHERE project_path = ?", -1, &del, nullptr) != SQLITE_OK) return rollback();
+    bindText(del, 1, projectPath);
+    bool ok = sqlite3_step(del) == SQLITE_DONE;
+    sqlite3_finalize(del);
+    if (!ok) return rollback();
+
+    sqlite3_stmt* ins = nullptr;
+    if (sqlite3_prepare_v2(db,
+        "INSERT INTO sample_usage(project_path, channel_name, sample_path, sample_key) VALUES(?,?,?,?)",
+        -1, &ins, nullptr) != SQLITE_OK) return rollback();
+    for (auto& r : rows)
+    {
+        sqlite3_reset(ins);
+        bindText(ins, 1, projectPath);
+        bindText(ins, 2, r.channelName);
+        bindText(ins, 3, r.samplePath);
+        bindText(ins, 4, NormaliseSampleKey(r.samplePath));
+        if (sqlite3_step(ins) != SQLITE_DONE) { sqlite3_finalize(ins); return rollback(); }
+    }
+    sqlite3_finalize(ins);
+
+    sqlite3_stmt* mark = nullptr;
+    if (sqlite3_prepare_v2(db, "INSERT OR IGNORE INTO sample_usage_indexed(project_path) VALUES(?)", -1, &mark, nullptr) != SQLITE_OK) return rollback();
+    bindText(mark, 1, projectPath);
+    ok = sqlite3_step(mark) == SQLITE_DONE;
+    sqlite3_finalize(mark);
+    if (!ok) return rollback();
+
+    return ExecuteSQL("COMMIT");
+}
+
+bool ProjectDatabase::DeleteSampleUsage(const juce::String& projectPath)
+{
+    if (db == nullptr) return false;
+    bool ok = true;
+    for (auto* sql : { "DELETE FROM sample_usage WHERE project_path = ?",
+                       "DELETE FROM sample_usage_indexed WHERE project_path = ?" })
+    {
+        sqlite3_stmt* s = nullptr;
+        if (sqlite3_prepare_v2(db, sql, -1, &s, nullptr) != SQLITE_OK) { ok = false; continue; }
+        bindText(s, 1, projectPath);
+        ok = (sqlite3_step(s) == SQLITE_DONE) && ok;
+        sqlite3_finalize(s);
+    }
+    return ok;
+}
+
+static std::vector<ProjectDatabase::SampleUsageRow> readUsageRows(sqlite3_stmt* s)
+{
+    std::vector<ProjectDatabase::SampleUsageRow> out;
+    auto txt = [&](int c) { const char* t = (const char*) sqlite3_column_text(s, c); return t ? juce::String::fromUTF8(t) : juce::String(); };
+    while (sqlite3_step(s) == SQLITE_ROW)
+        out.push_back({ txt(0), txt(1), txt(2), txt(3) });
+    return out;
+}
+
+std::vector<ProjectDatabase::SampleUsageRow> ProjectDatabase::FindSampleUsers(const juce::String& needle, bool substring)
+{
+    std::vector<SampleUsageRow> out;
+    if (db == nullptr || needle.trim().isEmpty()) return out;
+    sqlite3_stmt* s = nullptr;
+    const char* sql = substring
+        ? "SELECT project_path, channel_name, sample_path, sample_key FROM sample_usage WHERE sample_key LIKE ? ESCAPE '\\' ORDER BY project_path"
+        : "SELECT project_path, channel_name, sample_path, sample_key FROM sample_usage WHERE sample_key = ? ORDER BY project_path";
+    if (sqlite3_prepare_v2(db, sql, -1, &s, nullptr) != SQLITE_OK) return out;
+    auto key = NormaliseSampleKey(needle);
+    if (substring)
+        key = "%" + key.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    bindText(s, 1, key);
+    out = readUsageRows(s);
+    sqlite3_finalize(s);
+    return out;
+}
+
+std::vector<ProjectDatabase::SampleUsageRow> ProjectDatabase::GetSampleUsage(const juce::String& projectPath)
+{
+    std::vector<SampleUsageRow> out;
+    if (db == nullptr) return out;
+    sqlite3_stmt* s = nullptr;
+    if (sqlite3_prepare_v2(db, "SELECT project_path, channel_name, sample_path, sample_key FROM sample_usage WHERE project_path = ? ORDER BY id", -1, &s, nullptr) != SQLITE_OK) return out;
+    bindText(s, 1, projectPath);
+    out = readUsageRows(s);
+    sqlite3_finalize(s);
+    return out;
+}
+
+bool ProjectDatabase::IsProjectIndexed(const juce::String& projectPath)
+{
+    if (db == nullptr) return false;
+    sqlite3_stmt* s = nullptr;
+    if (sqlite3_prepare_v2(db, "SELECT 1 FROM sample_usage_indexed WHERE project_path = ?", -1, &s, nullptr) != SQLITE_OK) return false;
+    bindText(s, 1, projectPath);
+    bool found = sqlite3_step(s) == SQLITE_ROW;
+    sqlite3_finalize(s);
+    return found;
 }

@@ -364,23 +364,46 @@ void keyPlate (juce::Graphics& g, juce::Rectangle<float> r, bool down, bool on, 
     g.fillEllipse (led);
 }
 
-void FLOLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& base, bool hi, bool down)
+void FLOLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour&, bool hi, bool down)
 {
+    // One look for every key, so state is the only thing that varies:
+    //   neutral dark key  = idle        accent-lit key = active / toggled on
+    //   accent underline  = primary action (property "primary")
+    // The per-button colour that used to be set via buttonColourId is deliberately ignored.
     auto r = b.getLocalBounds().toFloat().reduced (1.f);
     const bool enabled = b.isEnabled();
-    // The per-button colour (set via buttonColourId) becomes the LED + underline colour.
-    auto ledCol = enabled ? base : base.withMultipliedSaturation (0.2f).withMultipliedBrightness (0.5f);
-    keyPlate (g, r, down, b.getToggleState() || down, *tex, ledCol);
-    // coloured strip along the bottom edge
-    g.setColour (ledCol.withAlpha (enabled ? 0.85f : 0.3f));
-    g.fillRoundedRectangle (r.getX() + 6.f, r.getBottom() - 4.f, r.getWidth() - 12.f, 2.f, 1.f);
-    if (hi && ! down && enabled) { g.setColour (juce::Colours::white.withAlpha (0.06f)); g.fillRoundedRectangle (r, 4.f); }
+    const bool on = b.getToggleState();
+    const bool primary = (bool) b.getProperties().getWithDefault ("primary", false);
+    constexpr float corner = 4.f;
+
+    juce::Colour top = on ? col::accent.brighter (0.15f) : juce::Colour (0xff2b2e35);
+    juce::Colour bot = on ? col::accent.darker (0.35f)   : juce::Colour (0xff181a1f);
+    if (! enabled) { top = juce::Colour (0xff1d1f24); bot = juce::Colour (0xff15171a); }
+    else if (hi && ! on) { top = top.brighter (0.12f); bot = bot.brighter (0.12f); }
+    if (down) std::swap (top, bot);
+
+    g.setGradientFill (juce::ColourGradient (top, 0.f, r.getY(), bot, 0.f, r.getBottom(), false));
+    g.fillRoundedRectangle (r, corner);
+
+    // top highlight + crisp edge keep the key readable against the brushed plate behind it
+    g.setColour (juce::Colours::white.withAlpha (enabled ? 0.10f : 0.04f));
+    g.drawHorizontalLine ((int) r.getY() + 1, r.getX() + corner, r.getRight() - corner);
+    g.setColour (on ? col::accent.brighter (0.3f) : (enabled ? juce::Colour (0xff5c616c) : juce::Colour (0xff33363d)));
+    g.drawRoundedRectangle (r, corner, 1.f);
+
+    if (primary && ! on)
+    {
+        g.setColour (col::accent.withAlpha (enabled ? 0.95f : 0.3f));
+        g.fillRoundedRectangle (r.getX() + 6.f, r.getBottom() - 4.f, r.getWidth() - 12.f, 2.f, 1.f);
+    }
 }
 
-void FLOLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool hi, bool down)
+void FLOLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool down)
 {
-    g.setFont (caps (juce::jmin (11.5f, b.getHeight() * 0.42f)));
-    g.setColour (! b.isEnabled() ? col::textFaint : (b.getToggleState() || down || hi) ? col::text : col::textDim);
+    g.setFont (caps (juce::jmin (12.f, b.getHeight() * 0.44f)));
+    const bool on = b.getToggleState();
+    g.setColour (! b.isEnabled() ? juce::Colour (0xff6a6e78)
+                 : on ? juce::Colour (0xff1a0f05) : col::text);
     g.drawText (b.getButtonText(), b.getLocalBounds().translated (0, down ? 1 : 0).reduced (4, 0),
                 juce::Justification::centred, true);
 }

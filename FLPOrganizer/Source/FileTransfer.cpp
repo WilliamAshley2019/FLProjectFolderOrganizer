@@ -4,6 +4,7 @@
 #include "H2PInspector.h"
 #include "PluginDestinations.h"
 #include "SafeFileOperations.h"
+#include "ScriptInspector.h"
 #include <set>
 #if JUCE_WINDOWS
  #include <windows.h>
@@ -168,6 +169,71 @@ juce::String validateZip (const juce::File& zipFile, const Limits& lim, juce::St
     return {};
 }
 
+// ─── script inspection ──────────────────────────────────────────────────────
+
+void inspectScriptFiles (Package& p, const std::atomic<bool>* cancel)
+{
+    std::map<juce::String, ScriptInspector::ScriptInfo> scripts;
+    std::unique_ptr<juce::ZipFile> zip;
+    if (p.isZip) zip = std::make_unique<juce::ZipFile> (p.source);
+
+    for (auto& rel : p.plannedFiles())
+    {
+        checkCancel (cancel);
+        if (! ScriptInspector::isScriptFile (rel)) continue;
+
+        juce::MemoryBlock data;
+        const int cap = ScriptInspector::kMaxScriptBytes + 1;
+        bool readable = false;
+
+        if (zip != nullptr)
+        {
+            for (int i = 0; i < zip->getNumEntries(); ++i)
+            {
+                auto* e = zip->getEntry (i);
+                if (e->filename.replaceCharacter ('\\', '/') != rel) continue;
+                std::unique_ptr<juce::InputStream> s (zip->createStreamForEntry (i));
+                if (s != nullptr) { s->readIntoMemoryBlock (data, cap); readable = true; }
+                break;
+            }
+        }
+        else
+        {
+            const juce::File f = p.source.isDirectory() ? p.source.getChildFile (rel) : p.source;
+            if (! f.isSymbolicLink() && ! SafeFileOperations::HasSymlinkAncestor (f))
+                if (juce::FileInputStream in (f); in.openedOk()) { in.readIntoMemoryBlock (data, cap); readable = true; }
+        }
+
+        if (! readable)
+        {
+            ScriptInspector::ScriptInfo bad; bad.problem = "Cannot read script";
+            scripts[rel] = bad;
+        }
+        else scripts[rel] = ScriptInspector::inspectScript (data.getData(), data.getSize());
+    }
+
+    p.hasScripts = ! scripts.empty();
+    if (! p.hasScripts) return;
+
+    auto classified = ScriptInspector::classifyScripts (scripts);
+    p.scriptKind = classified.kind;
+    p.scriptNotes = classified.notes;
+
+    // Hardware controllers install as one folder: entry points must sit at the package root.
+    for (auto& rel : p.plannedFiles())
+    {
+        auto name = rel.fromLastOccurrenceOf ("/", false, false);
+        if (rel.endsWithIgnoreCase (".py") && name.startsWithIgnoreCase ("device_"))
+        {
+            auto parent = rel.contains ("/") ? rel.upToLastOccurrenceOf ("/", false, false) : juce::String();
+            if (parent != p.zipRootFolder) p.hardwareNested = true;
+        }
+    }
+    if (p.hardwareNested)
+        p.scriptNotes.add ("Hardware entry points are inside subfolders. Extract the ZIP if necessary and drop each device_ "
+                           "file's containing folder, so it is installed as one controller folder.");
+}
+
 // ─── scan ───────────────────────────────────────────────────────────────────
 
 bool scan (const juce::File& source, const Limits& lim, const std::atomic<bool>& cancel,
@@ -213,6 +279,7 @@ bool scan (const juce::File& source, const Limits& lim, const std::atomic<bool>&
             for (auto& f : p.files) { tops.insert (f.upToFirstOccurrenceOf ("/", false, false)); if (! f.contains ("/")) allNested = false; }
             for (auto& d : p.directories) tops.insert (d.upToFirstOccurrenceOf ("/", false, false));
             if (tops.size() == 1 && allNested && ! p.files.isEmpty()) p.zipRootFolder = *tops.begin();
+            inspectScriptFiles (p, &cancel);
             out = std::move (p);
             return true;
         }
@@ -229,6 +296,7 @@ bool scan (const juce::File& source, const Limits& lim, const std::atomic<bool>&
                 p.pluginName = fi.pluginName; p.pluginKind = fi.pluginKind; p.fstType = fi.fstType;
                 p.displayName = fi.displayName; p.hostedName = fi.hostedName; p.databaseName = fi.databaseName;
             }
+            inspectScriptFiles (p, &cancel);
             out = std::move (p);
             return true;
         }
@@ -257,6 +325,7 @@ bool scan (const juce::File& source, const Limits& lim, const std::atomic<bool>&
             }
         }
         p.files.sort (true); p.directories.sort (true);
+        inspectScriptFiles (p, &cancel);
         out = std::move (p);
         return true;
     }

@@ -1,4 +1,5 @@
 #include "UserDataLocator.h"
+#include "Discovery.h"
 
 namespace
 {
@@ -27,22 +28,10 @@ juce::File UserDataLocator::findUserDataFolder()
 {
     if (auto o = getOverride(); looksLikeUserData (o)) return o;
 
-   #if JUCE_WINDOWS
-    for (auto* key : { "HKEY_CURRENT_USER\\Software\\Image-Line\\Shared\\Paths" })
-    {
-        // JUCE's registry helper can read named values, but not enumerate them,
-        // so probe the value names Image-Line has been seen to use.
-        for (auto* valueName : { "FL Studio", "FL Studio 20", "FL Studio 21", "Data", "User data" })
-        {
-            auto v = juce::WindowsRegistry::getValue (juce::String (key) + "\\" + valueName);
-            if (v.isNotEmpty())
-            {
-                juce::File f (v);
-                if (looksLikeUserData (f)) return f;
-            }
-        }
-    }
-   #endif
+    // Registered location (Shared\Paths "Shared data", then per-version keys); relocated or
+    // OneDrive-redirected folders show up here rather than under Documents.
+    for (auto& c : Discovery::registryCandidates (Discovery::Kind::UserData))
+        if (looksLikeUserData (c.path)) return c.path;
 
     auto docs = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
                     .getChildFile ("Image-Line").getChildFile ("FL Studio");

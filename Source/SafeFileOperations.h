@@ -36,6 +36,29 @@ public:
     // "System-marked file" or "Inside protected directory: C:\Windows".
     static juce::String GetProtectionReason(const juce::File& file);
 
+    // ---- Path-safety checks for untrusted relative paths (archive entries,
+    // ---- package-relative names, preset names) -------------------------
+
+    // True only if `relativePath` is safe to join onto a trusted root.
+    // Rejects: empty input, leading '/' or '\' (including UNC), drive
+    // letters ("C:"), any "." or ".." segment, control characters,
+    // < > : " | ? *, segments ending in '.' or ' ', and Windows reserved
+    // device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9, CLOCK$, CONIN$,
+    // CONOUT$ -- with or without an extension).
+    static bool IsSafeRelativePath(const juce::String& relativePath);
+
+    // Why IsSafeRelativePath() said no, for logs/UI. Returns "OK" if safe.
+    static juce::String GetSafeRelativePathRejectionReason(const juce::String& relativePath);
+
+    // True if `file`, or any ancestor of it, is a symlink / junction /
+    // other reparse point. If `stopAtRoot` is given, only components BELOW
+    // that root are examined (the root itself and everything above it are
+    // trusted). That matters on Windows: Documents is often redirected
+    // through OneDrive or a junction, and walking all the way to the
+    // drive root would flag every write as unsafe. Always pass the
+    // validated destination root when checking a write target.
+    static bool HasSymlinkAncestor(const juce::File& file, const juce::File& stopAtRoot = {});
+
 private:
     static const juce::Array<juce::File>& GetBlockedRoots();
 };

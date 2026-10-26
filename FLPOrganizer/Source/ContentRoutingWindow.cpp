@@ -28,6 +28,10 @@ public:
                 found.push_back (std::move (g));
             }
         }
+        found = ContentRouter::groupLooseScripts (std::move (found), &owner.cancelFlag);
+        for (auto& pkg : found)
+            for (auto& note : pkg.scriptNotes)
+                post ("Script note (" + pkg.folderName() + "): " + note);
         auto s = safe;
         auto* fp = new std::vector<FileTransfer::Package> (std::move (found));
         juce::MessageManager::callAsync ([s, fp]

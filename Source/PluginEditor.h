@@ -8,6 +8,7 @@
 #include "PluginDatabaseWindow.h"
 #include "ProtectedFilesWindow.h"
 #include "SampleScannerWindow.h"
+#include "OrganizerTheme.h"
 
 class FLProjectOrganizerEditor : public juce::AudioProcessorEditor,
     private juce::Timer
@@ -65,6 +66,11 @@ private:
     // Action buttons
     juce::TextButton scanBtn, organizeBtn, stopBtn;
     juce::TextButton exportCSVBtn, undoBtn, pluginDbBtn, protectedFilesBtn, sampleScannerBtn;
+    juce::TextButton indexSamplesBtn, findSampleUsersBtn, importContentBtn;
+    flo::ui::Chassis chassis;
+    flo::ui::LcdStrip lcd;
+    void updateLcd(int projectCount, int zippedCount);
+    int lcdProjects = 0, lcdZipped = 0;
 
     // Results display
     juce::TableListBox resultTable;
@@ -83,6 +89,10 @@ private:
     // Database
     ProjectDatabase database;
     bool dbInitialized = false;
+    juce::File databaseFile;
+    std::unique_ptr<juce::Thread> sampleIndexThread;   // joined in the destructor
+    void startSampleIndexing();
+    void promptFindSampleUsers();
 
     // FL Studio installation discovery (Phase 3) -- cached on editor
     // construction so right-click "Open With" menus don't re-scan disk
@@ -112,6 +122,7 @@ private:
     void updateResultTable();
     void sendLog(const juce::String& msg);
     void refreshDatabaseView();
+    std::function<void(const juce::String&)> makeLaunchLog();
     void exportCSV();
     void undoLastOperation();
 

@@ -15,7 +15,7 @@ public:
 
     void resized() override;
 
-    void refreshFromDisk();
+    void refreshFromDisk();   // asynchronous: scans on a worker thread, fills the table when done
 
 private:
     class TableModel : public juce::TableListBoxModel
@@ -56,6 +56,17 @@ private:
 
     std::vector<PluginDatabaseManager::PluginEntry> allRows; // unfiltered, from last scan
     void applySourceFilter();
+
+    // Background scan (the database can be tens of thousands of files, so it must
+    // never run on the message thread -- that also freezes the host).
+    class ScanThread;
+    std::unique_ptr<ScanThread> scanThread;
+    bool rescanQueued = false;
+    void onScanFinished(std::vector<PluginDatabaseManager::PluginEntry> results);
+
+    // After a single-entry change succeeds, patch the cached list instead of rescanning everything.
+    static juce::String keyOf(const PluginDatabaseManager::PluginEntry& e);
+    void replaceCachedEntry(const juce::String& oldKey, const PluginDatabaseManager::PluginEntry& updated);
 
     std::unique_ptr<juce::FileChooser> csvChooser;
 

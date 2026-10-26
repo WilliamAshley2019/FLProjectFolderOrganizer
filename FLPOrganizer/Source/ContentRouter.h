@@ -18,6 +18,10 @@ namespace ContentRouter
     // packages (containing an .flp) are returned unsplit.
     std::vector<Package> fstPackageGroups (const Package&, bool split = true);
 
+    // Loose .py/.pyscript files dropped together from one folder become one package, so helper
+    // imports between them can be resolved. A single entry point names the destination subfolder.
+    std::vector<Package> groupLooseScripts (std::vector<Package>, const std::atomic<bool>* cancel = nullptr);
+
     juce::String pluginDestinationId (const juce::String& pluginName);
     bool matchesPlugin (const Destination&, const juce::String& pluginName,
                         const juce::String& pluginKind = {}, const juce::String& fstType = {});

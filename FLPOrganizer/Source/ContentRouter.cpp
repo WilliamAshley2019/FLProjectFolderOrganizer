@@ -29,7 +29,7 @@ std::vector<Package> fstPackageGroups (const Package& pkg, bool split)
     bool anyIdentified = false, hasFlp = false;
     for (auto& f : pkg.files) { if (ext (f) == ".flp") hasFlp = true; }
     for (auto& kv : pkg.info) if (kv.second.pluginName.isNotEmpty() || kv.second.fstType.isNotEmpty() || kv.second.error.isNotEmpty()) anyIdentified = true;
-    if (! split || ! anyIdentified || hasFlp) return { pkg };
+    if (! split || pkg.hasScripts || ! anyIdentified || hasFlp) return { pkg };
 
     // Files that carry a plugin identity vs. everything else.
     juce::StringArray presetFiles;
@@ -156,6 +156,31 @@ std::vector<const Destination*> compatible (const Config& c, const juce::String&
 
 std::vector<const Destination*> packageChoices (const Config& c, const Package& p, bool automatic)
 {
+    if (p.hasScripts)
+    {
+        // Script packages route by the type their imports reveal; never guess when it is undecided.
+        std::vector<const Destination*> out;
+        for (auto& d : c.destinations)
+        {
+            if (! d.enabled || (automatic && ! d.automatic)) continue;
+            const bool isScriptDest = d.id == "piano" || d.id == "edison" || d.id == "hardware";
+            if (automatic)
+            {
+                if (p.scriptKind.isNotEmpty() && ! (p.scriptKind == "hardware" && p.hardwareNested)
+                    && (d.id == p.scriptKind || d.extraString ("script_type") == p.scriptKind))
+                    out.push_back (&d);
+            }
+            else
+            {
+                if (p.scriptKind.isNotEmpty() && isScriptDest && d.id != p.scriptKind) continue;
+                bool accepts = d.extensions.isEmpty();
+                for (auto& f : p.plannedFiles()) if (d.accepts (f)) { accepts = true; break; }
+                if (accepts) out.push_back (&d);
+            }
+        }
+        return out;
+    }
+
     std::set<juce::String> primary;
     for (auto& f : p.plannedFiles()) if (isPrimary (ext (f))) primary.insert (ext (f));
 
@@ -165,6 +190,51 @@ std::vector<const Destination*> packageChoices (const Config& c, const Package& 
     if (automatic && onlyIn ({ ".chenv" })) return compatible (c, "envelope.chenv", true);
     if (automatic && onlyIn ({ ".fsc", ".mid", ".midi" })) return compatible (c, "score.fsc", true);
     return compatible (c, p.routePath(), automatic, p.pluginName, p.pluginKind, p.fstType);
+}
+
+std::vector<Package> groupLooseScripts (std::vector<Package> packages, const std::atomic<bool>* cancel)
+{
+    std::map<juce::String, std::vector<size_t>> byParent;
+    for (size_t i = 0; i < packages.size(); ++i)
+    {
+        auto& p = packages[i];
+        if (p.source.existsAsFile() && ! p.isZip && (p.source.hasFileExtension (".py") || p.source.hasFileExtension (".pyscript")))
+            byParent[p.source.getParentDirectory().getFullPathName()].push_back (i);
+    }
+
+    std::set<size_t> merged;
+    std::vector<Package> combinedPackages;
+    for (auto& [parent, idx] : byParent)
+    {
+        if (idx.size() < 2) continue;
+        Package combined;
+        combined.source = juce::File (parent);
+        for (auto i : idx)
+        {
+            combined.files.add (packages[i].source.getFileName());
+            merged.insert (i);
+        }
+        combined.hasSelection = true;
+        combined.selectedFiles = combined.files;
+        FileTransfer::inspectScriptFiles (combined, cancel);
+
+        juce::StringArray entries;
+        for (auto& f : combined.files)
+            if (f.endsWithIgnoreCase (".pyscript") || f.startsWithIgnoreCase ("device_")) entries.add (f);
+        if (entries.size() == 1)
+        {
+            auto stem = juce::File::createFileWithoutCheckingPath ("/" + entries[0]).getFileNameWithoutExtension();
+            if (stem.startsWithIgnoreCase ("device_")) stem = stem.substring (7);
+            combined.destinationSubfolder = stem.isEmpty() ? juce::String ("Scripts") : stem;
+        }
+        combinedPackages.push_back (std::move (combined));
+    }
+
+    std::vector<Package> result;
+    for (size_t i = 0; i < packages.size(); ++i)
+        if (merged.count (i) == 0) result.push_back (std::move (packages[i]));
+    for (auto& c : combinedPackages) result.push_back (std::move (c));
+    return result;
 }
 
 bool packageMatches (const Config& c, const juce::StringArray& paths, const Destination& dest, juce::StringArray* bad)

@@ -1,13 +1,49 @@
 #include "PluginDatabaseManager.h"
 #include "SafeFileOperations.h"
+#include "UserDataLocator.h"
+
+#include <mutex>
+#include <unordered_map>
 
 #if JUCE_WINDOWS
  #include <windows.h>
  #pragma comment(lib, "version.lib")
 #endif
 
+namespace
+{
+    // Reading a PE version resource means opening every plugin binary, which on a
+    // large database (thousands of plugins, antivirus watching) is the slowest part
+    // of a scan. Results are cached by path + size + modification time so a rescan
+    // only touches binaries that actually changed.
+    struct VersionCacheEntry { juce::int64 size = 0; juce::int64 mtime = 0; juce::String version; };
+    std::mutex versionCacheMutex;
+    std::unordered_map<std::string, VersionCacheEntry> versionCache;
+
+    juce::String cachedBinaryVersion(const juce::File& file, juce::String (*reader)(const juce::File&))
+    {
+        const auto key = file.getFullPathName().toStdString();
+        const auto size = file.getSize();
+        const auto mtime = file.getLastModificationTime().toMilliseconds();
+        {
+            std::lock_guard<std::mutex> lock(versionCacheMutex);
+            auto it = versionCache.find(key);
+            if (it != versionCache.end() && it->second.size == size && it->second.mtime == mtime)
+                return it->second.version;
+        }
+        auto version = reader(file);
+        std::lock_guard<std::mutex> lock(versionCacheMutex);
+        versionCache[key] = { size, mtime, version };
+        return version;
+    }
+}
+
 juce::File PluginDatabaseManager::GetDefaultDatabaseRoot()
 {
+    // Honour a relocated / redirected FL user-data folder before assuming <Documents>\Image-Line.
+    if (auto located = UserDataLocator::getPluginDatabaseRoot(); located != juce::File())
+        return located;
+
     return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
         .getChildFile("Image-Line")
         .getChildFile("FL Studio")
@@ -62,6 +98,9 @@ void PluginDatabaseManager::ScanInstalledIni(const juce::File& root, std::vector
 
         for (const auto& section : sections)
         {
+            if (cancelScan.load())
+                return;
+
             // Section names look like "Effects\VST\Average" or
             // "Generators\VST3\KORG MS-20 V". First path component
             // tells us Generator vs Effect; second is the format folder
@@ -131,7 +170,7 @@ void PluginDatabaseManager::ScanInstalledIni(const juce::File& root, std::vector
                 // vendor plugin DLLs/VST3/CLAP files, just not for
                 // Image-Line's own Fruity-native plugins under %FLPath%).
                 if (rec.filePathRaw.isNotEmpty() && !rec.filePathRaw.contains("%"))
-                    rec.versionString = GetBinaryFileVersion(juce::File(rec.filePathRaw));
+                    rec.versionString = cachedBinaryVersion(juce::File(rec.filePathRaw), &PluginDatabaseManager::GetBinaryFileVersion);
 
                 entry.fileRecords.push_back(rec);
             }
@@ -205,6 +244,9 @@ void PluginDatabaseManager::ScanFavoritesFolder(const juce::File& typeRoot, Plug
 
     for (const auto& fst : fstFiles)
     {
+        if (cancelScan.load())
+            return;
+
         PluginEntry entry;
         entry.name    = fst.getFileNameWithoutExtension();
         entry.fstFile = fst;

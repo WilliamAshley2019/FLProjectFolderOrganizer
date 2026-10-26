@@ -137,3 +137,128 @@ juce::String SafeFileOperations::GetProtectionReason(const juce::File& file)
 
     return {};
 }
+
+// ============================================================================
+// Untrusted relative-path checks
+// ============================================================================
+
+namespace
+{
+    bool isReservedDeviceName(const juce::String& segment)
+    {
+        static const juce::StringArray reserved = {
+            "CON", "PRN", "AUX", "NUL", "CLOCK$", "CONIN$", "CONOUT$",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
+        // Windows ignores any extension and trailing spaces when deciding
+        // whether a name is a device: "CON.txt" and "CON " are both CON.
+        juce::String stem = segment.upToFirstOccurrenceOf(".", false, false).trimEnd();
+        return reserved.contains(stem, true);
+    }
+
+    // Returns an empty string if the segment is fine, otherwise the reason.
+    juce::String segmentProblem(const juce::String& part)
+    {
+        if (part.isEmpty())                       return "Empty path segment";
+        if (part == "." || part == "..")          return "Contains '.' or '..' segment";
+        if (part.endsWithChar('.') || part.endsWithChar(' '))
+                                                  return "Segment ends with a dot or space";
+        if (part.containsAnyOf("<>:\"|?*"))       return "Contains an invalid character";
+        for (auto c : part)
+            if (c < 32)                           return "Contains a control character";
+        if (isReservedDeviceName(part))           return "Windows reserved device name";
+        return {};
+    }
+}
+
+juce::String SafeFileOperations::GetSafeRelativePathRejectionReason(const juce::String& relativePath)
+{
+    if (relativePath.isEmpty())
+        return "Empty path";
+    if (relativePath.startsWithChar('/') || relativePath.startsWithChar('\\'))
+        return "Absolute or UNC path";
+    if (relativePath.length() >= 2 && relativePath[1] == ':'
+        && juce::CharacterFunctions::isLetter(relativePath[0]))
+        return "Drive-qualified path";
+
+    juce::StringArray parts;
+    parts.addTokens(relativePath, "/\\", "");
+
+    // Trailing separators (zip directory entries such as "kit/") produce
+    // one empty final token; that is fine. Empty tokens anywhere else
+    // ("a//b") are rejected so two spellings can't name the same file.
+    if (parts.size() > 0 && parts[parts.size() - 1].isEmpty())
+        parts.remove(parts.size() - 1);
+
+    if (parts.isEmpty())
+        return "Empty path";
+
+    for (const auto& part : parts)
+    {
+        auto problem = segmentProblem(part);
+        if (problem.isNotEmpty())
+            return problem;
+    }
+
+    return "OK";
+}
+
+bool SafeFileOperations::IsSafeRelativePath(const juce::String& relativePath)
+{
+    return GetSafeRelativePathRejectionReason(relativePath) == "OK";
+}
+
+#if JUCE_WINDOWS
+namespace
+{
+    // Only real links count. Cloud-sync placeholders (OneDrive etc.) also
+    // carry FILE_ATTRIBUTE_REPARSE_POINT but are ordinary files/folders for
+    // our purposes, so check the reparse tag instead of the attribute alone.
+    bool isWindowsLinkReparsePoint(const juce::File& f)
+    {
+        WIN32_FIND_DATAW fd {};
+        HANDLE h = FindFirstFileW(f.getFullPathName().toWideCharPointer(), &fd);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        FindClose(h);
+
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0)
+            return false;
+
+        return fd.dwReserved0 == IO_REPARSE_TAG_SYMLINK
+            || fd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT;
+    }
+}
+#endif
+
+bool SafeFileOperations::HasSymlinkAncestor(const juce::File& file, const juce::File& stopAtRoot)
+{
+    const bool haveRoot = (stopAtRoot != juce::File());
+
+    // Fail closed: if a root was given and the file isn't actually inside
+    // it, we can't vouch for the path.
+    if (haveRoot && file != stopAtRoot && !file.isAChildOf(stopAtRoot))
+        return true;
+
+    juce::File current = file;
+    for (;;)
+    {
+        if (haveRoot && current == stopAtRoot)
+            return false;
+
+        if (current.isSymbolicLink())
+            return true;
+
+       #if JUCE_WINDOWS
+        if (isWindowsLinkReparsePoint(current))
+            return true;
+       #endif
+
+        auto parent = current.getParentDirectory();
+        if (parent == current)
+            return false; // reached the filesystem root
+        current = parent;
+    }
+}

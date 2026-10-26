@@ -180,33 +180,29 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
     // Action buttons
     addAndMakeVisible(scanBtn);
     scanBtn.setButtonText("Scan");
-    scanBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF4488FF));
+    scanBtn.getProperties().set("primary", true);
     scanBtn.onClick = [this] { startScan(); };
 
     addAndMakeVisible(organizeBtn);
     organizeBtn.setButtonText("Organize");
-    organizeBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF8800));
+    organizeBtn.getProperties().set("primary", true);
     organizeBtn.onClick = [this] { startOrganize(); };
 
     addAndMakeVisible(stopBtn);
     stopBtn.setButtonText("Stop");
-    stopBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF4444));
-    stopBtn.onClick = [this] { stopOperation(); };
+        stopBtn.onClick = [this] { stopOperation(); };
     stopBtn.setEnabled(false);
 
     addAndMakeVisible(exportCSVBtn);
     exportCSVBtn.setButtonText("Export CSV");
-    exportCSVBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF44AA44));
-    exportCSVBtn.onClick = [this] { exportCSV(); };
+        exportCSVBtn.onClick = [this] { exportCSV(); };
 
     addAndMakeVisible(undoBtn);
     undoBtn.setButtonText("Undo Last");
-    undoBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFAA44FF));
-    undoBtn.onClick = [this] { undoLastOperation(); };
+        undoBtn.onClick = [this] { undoLastOperation(); };
 
     addAndMakeVisible(pluginDbBtn);
     pluginDbBtn.setButtonText("Plugin Database");
-    pluginDbBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00)); // phosphor orange
     // PluginDatabaseWindow deletes itself in closeButtonPressed() -- standard
     // JUCE idiom for a non-modal, self-owned top-level window launched from
     // a button click.
@@ -214,8 +210,7 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 
     addAndMakeVisible(protectedFilesBtn);
     protectedFilesBtn.setButtonText("Protected Files");
-    protectedFilesBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF4444));
-    protectedFilesBtn.onClick = [this]
+        protectedFilesBtn.onClick = [this]
     {
         auto* win = new ProtectedFilesWindow();
         win->SetEntries(protectedFilesFound);
@@ -223,23 +218,19 @@ FLProjectOrganizerEditor::FLProjectOrganizerEditor(FLProjectOrganizerProcessor& 
 
     addAndMakeVisible(sampleScannerBtn);
     sampleScannerBtn.setButtonText("Sample Scanner");
-    sampleScannerBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
-    sampleScannerBtn.onClick = [this] { new SampleScannerWindow(); };
+        sampleScannerBtn.onClick = [this] { new SampleScannerWindow(); };
 
     addAndMakeVisible(indexSamplesBtn);
     indexSamplesBtn.setButtonText("Index Samples");
-    indexSamplesBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
-    indexSamplesBtn.onClick = [this] { startSampleIndexing(); };
+        indexSamplesBtn.onClick = [this] { startSampleIndexing(); };
 
     addAndMakeVisible(findSampleUsersBtn);
     findSampleUsersBtn.setButtonText("Find Sample Users...");
-    findSampleUsersBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFFFF5C00));
-    findSampleUsersBtn.onClick = [this] { promptFindSampleUsers(); };
+        findSampleUsersBtn.onClick = [this] { promptFindSampleUsers(); };
 
     addAndMakeVisible(importContentBtn);
     importContentBtn.setButtonText("Import Content...");
-    importContentBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF2BFF6B));
-    importContentBtn.onClick = [this] { new ContentRoutingWindow(); };   // deletes itself on close
+        importContentBtn.onClick = [this] { new ContentRoutingWindow(); };   // deletes itself on close
 
     // Status and progress
     addAndMakeVisible(statusLabel);
@@ -794,6 +785,8 @@ void FLProjectOrganizerEditor::refreshDatabaseView()
 
 void FLProjectOrganizerEditor::updateLcd(int projectCount, int zippedCount)
 {
+    lcdProjects = projectCount;
+    lcdZipped = zippedCount;
     lcd.set({ { "PROJECTS", juce::String(juce::jmin(projectCount, 99999)).paddedLeft('0', 4), 1.4f },
               { "IN ZIPS", juce::String(juce::jmin(zippedCount, 9999)).paddedLeft('0', 3), 1.0f },
               { "FL INSTALLS", juce::String(juce::jmin((int)installedVersions.size(), 99)).paddedLeft('0', 2), 1.0f } });
@@ -848,7 +841,7 @@ void FLProjectOrganizerEditor::undoLastOperation()
 void FLProjectOrganizerEditor::refreshInstalledVersions()
 {
     installedVersions = installScanner.ScanForInstallations();
-    updateLcd((int)tableModel->displayRows.size(), 0);
+    updateLcd(lcdProjects, lcdZipped);     // keep the last known counts; only the install count changed
 
     if (installedVersions.empty())
     {
@@ -866,6 +859,17 @@ void FLProjectOrganizerEditor::refreshInstalledVersions()
 // ============================================================================
 // Right-Click Context Menu for Result Table Rows (Phase 3)
 // ============================================================================
+std::function<void(const juce::String&)> FLProjectOrganizerEditor::makeLaunchLog()
+{
+    // The launcher keeps reporting for a while after the menu closes, so never capture a raw `this`.
+    juce::Component::SafePointer<FLProjectOrganizerEditor> safe(this);
+    return [safe](const juce::String& message)
+    {
+        if (safe != nullptr)
+            safe->sendLog(message);
+    };
+}
+
 void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int> screenPosition)
 {
     if (rowNumber < 0 || rowNumber >= (int)tableModel->displayRows.size())
@@ -884,7 +888,13 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
         menu.addItem(96, "SHA-256: " + entry.hash.substring(0, 16) + "...", false);
     menu.addSeparator();
 
-    menu.addItem(1, "Open Containing Folder");
+    menu.addItem(1, "Show in Explorer");
+    menu.addItem(10, "Copy Path");
+    if (entry.hash.isNotEmpty())
+        menu.addItem(11, "Copy SHA-256");
+    if (!entry.isZipped)
+        menu.addItem(12, "Open with Windows default (file association)");
+    menu.addSeparator();
 
     // Best-match FL Studio version, if any installs were found
     const FLInstallationScanner::Installation* bestMatch = nullptr;
@@ -921,19 +931,34 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
 
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
         juce::Rectangle<int>(screenPosition, screenPosition)),
-        [this, projectFile, bestMatch](int result)
+        [this, projectFile, bestMatch, entryHash = entry.hash](int result)
         {
             if (result == 0)
                 return;
 
             if (result == 1)
             {
-                projectFile.getParentDirectory().startAsProcess();
+                if (projectFile.exists()) projectFile.revealToUser();
+                else projectFile.getParentDirectory().startAsProcess();
+            }
+            else if (result == 10)
+            {
+                juce::SystemClipboard::copyTextToClipboard(projectFile.getFullPathName());
+            }
+            else if (result == 11)
+            {
+                juce::SystemClipboard::copyTextToClipboard(entryHash);
+            }
+            else if (result == 12)
+            {
+                // Whatever Windows has registered for .flp (usually the most recently installed FL).
+                if (!projectFile.startAsProcess())
+                    sendLog("Windows could not open " + projectFile.getFileName() + " with its default program.");
             }
             else if (result == 2 && bestMatch != nullptr)
             {
                 sendLog("Attempting to launch: " + bestMatch->executablePath.getFullPathName());
-                if (!FLInstallationScanner::LaunchInstallation(*bestMatch, projectFile))
+                if (!FLInstallationScanner::LaunchInstallation(*bestMatch, projectFile, makeLaunchLog()))
                     sendLog("Failed to launch " + bestMatch->versionLabel +
                         " -- executable not found or failed to start at: " +
                         bestMatch->executablePath.getFullPathName());
@@ -954,7 +979,7 @@ void FLProjectOrganizerEditor::showRowContextMenu(int rowNumber, juce::Point<int
                     if (seen == index)
                     {
                         sendLog("Attempting to launch: " + v.executablePath.getFullPathName());
-                        if (!FLInstallationScanner::LaunchInstallation(v, projectFile))
+                        if (!FLInstallationScanner::LaunchInstallation(v, projectFile, makeLaunchLog()))
                             sendLog("Failed to launch " + v.versionLabel +
                                 " -- executable not found or failed to start at: " +
                                 v.executablePath.getFullPathName());

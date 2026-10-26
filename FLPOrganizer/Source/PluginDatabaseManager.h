@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include <atomic>
 #include "RecycleBinManager.h"
 
 // Manages FL Studio's "Plugin database", which has TWO distinct parts
@@ -98,6 +99,10 @@ public:
     };
 
     PluginDatabaseManager() = default;
+
+    // Set from another thread to make an in-progress ScanDatabase() return early
+    // (with whatever it had gathered). Lets the UI close the window mid-scan.
+    std::atomic<bool> cancelScan { false };
 
     // Standard location: Documents\Image-Line\FL Studio\Presets\Plugin database
     static juce::File GetDefaultDatabaseRoot();

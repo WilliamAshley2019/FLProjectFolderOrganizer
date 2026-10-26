@@ -5,7 +5,11 @@ FLProjectOrganizerProcessor::FLProjectOrganizerProcessor()
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true))
 {
 }
-
+bool FLProjectOrganizerProcessor::saveProjectAs(const juce::File& file)
+{
+    const juce::ScopedLock sl(projectLock);
+    return projectPtr != nullptr && projectPtr->save(file);
+}
 FLProjectOrganizerProcessor::~FLProjectOrganizerProcessor() {}
 
 juce::AudioProcessorEditor* FLProjectOrganizerProcessor::createEditor()

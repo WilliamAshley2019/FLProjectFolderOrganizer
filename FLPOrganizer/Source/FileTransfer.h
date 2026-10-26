@@ -37,6 +37,12 @@ namespace FileTransfer
         juce::String zipRootFolder;              // single top-level folder inside a ZIP, if any
         juce::String destinationSubfolder;
 
+        // Script packages (.py / .pyscript): read as data, never executed.
+        bool hasScripts = false;
+        juce::String scriptKind;                 // "piano" | "edison" | "hardware" | "" (undecided)
+        juce::StringArray scriptNotes;
+        bool hardwareNested = false;             // device_*.py entry points below the package root
+
         const juce::StringArray& plannedFiles() const { return hasSelection ? selectedFiles : files; }
         juce::String folderName() const { return destinationSubfolder.isNotEmpty() ? destinationSubfolder
                                                 : (isZip ? source.getFileNameWithoutExtension() : source.getFileName()); }
@@ -55,6 +61,10 @@ namespace FileTransfer
     // Scan a file / folder / ZIP. `lookup` may be null (then FXP/H2P stay unidentified).
     bool scan (const juce::File& source, const Limits&, const std::atomic<bool>& cancel,
                InstalledPluginLookup* lookup, Package& out, juce::String& error);
+
+    // Reads the package's .py/.pyscript files (size-capped) and decides the script type.
+    // Sets hasScripts / scriptKind / scriptNotes / hardwareNested. Throws nothing; failures become notes.
+    void inspectScriptFiles (Package&, const std::atomic<bool>* cancel = nullptr);
 
     // Validates the ZIP without extracting. Returns "" when safe, else the reason.
     juce::String validateZip (const juce::File& zip, const Limits&, juce::StringArray* filesOut = nullptr,
