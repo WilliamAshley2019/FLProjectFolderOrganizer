@@ -5,16 +5,13 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 
 2026-10-25 So 3 months has passed and I've started to look at this project again.
 Added partial reskin will likely go with different button colour such as black maybe. Just testing the new skin, and a few new functions.
-There is some more stuff to get into the plugin hopefully will update over the news few days. Need to likely update some stuff due to changes
-in fl studio 26.2 flp, not sure how long that will take to add in could be a while the new up to 25 mixer slots will likely require some changes.
-It is very likely that for what is reported currently will not properly obtain information on mixer tracks 11 and higher currently.
-The new source is in FLPOrganizer folder and the new vst3 build is the FLPOraganizer.vst3. There is a lot that needs to be doen with this to update it.
-No timeline on how long it will take to update currently I will likely wait until 26.2 goes into full release version before I attempt to try to understand what is 
-going on with the flp format as at this point I really don't understand what has changed but I am guessing something has changed with how mixer tracks
-are treated it may just be "more"  count on how it is structure but it could be a total rewrite of the blobs and calls which would likely lead to this tool
-being fairly broken it will take time to figure out what the situation is.
 
-TO DO - get the buttons more readable and contrastive currently metal on metal is making it a little obscured. Like to have "active" vs non active tab colour ratehr than the multicolour organizational tabbing. 
+There is some more stuff to get into the plugin hopefully will update over the news few days. Need to likely update some stuff due to changes in fl studio 26.2 flp, not sure how long that will take to add in could be a while the new up to 25 mixer slots will likely require some changes. It is very likely that for what is reported currently will not properly obtain information on mixer tracks 11 and higher currently. The new source is in FLPOrganizer folder and the new vst3 build is the FLPOraganizer.vst3. There is a lot that needs to be doen with this to update it. No timeline on how long it will take to update currently I will likely wait until 26.2 goes into full release version before I attempt to try to understand what is  going on with the flp format as at this point I really don't understand what has changed but I am guessing something has changed with how mixer tracks are treated it may just be "more"  count on how it is structure but it could be a total rewrite of the blobs and calls which would likely lead to this toolbeing fairly broken it will take time to figure out what the situation is.
+
+TO DO: 
+- get the buttons more readable and contrastive currently metal on metal is making it a little obscured. Like to have "active" vs non active tab colour ratehr than the multicolour organizational tabbing.
+- add the right click interactions on the database items c
+- currently database interactions are somewhat frozen need to figure out if it is solely due to the database size handing or if something else is at play. 
  
 ISSUES:  
 - zip file count not updating on top right corner
