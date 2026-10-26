@@ -16,6 +16,7 @@ being fairly broken it will take time to figure out what the situation is.
 
 TO DO - get the buttons more readable and contrastive currently metal on metal is making it a little obscured. Like to have "active" vs non active tab colour ratehr than the multicolour organizational tabbing. 
  
+ISSUES:  zip file count not updating on top right corner
 
 2026-07-26 a little more testing on automation. LFO was tested and determined 
 To Do:
