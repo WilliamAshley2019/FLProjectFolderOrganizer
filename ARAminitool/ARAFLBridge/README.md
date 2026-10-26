@@ -1,3 +1,5 @@
+This was a muse for the day, nothing has been tested or verified to work or perform the functions it was designed for, it is just an approach to using ARA with fl studio - much is still missing.
+
 # ARA FL Bridge v0.2 (thought experiment, now data-driven)
 
 Two halves joined by a sidecar JSON:
