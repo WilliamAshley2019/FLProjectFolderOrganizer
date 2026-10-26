@@ -2,6 +2,19 @@ This project is independent and is not affiliated with Image-Line / FL Studio. T
 
 WARNING: None of this is known to be correct, it is purely testing and experimental. Bugs still exist! However, some basic stuff is working. FLP Toolkit is now working however likely bugs not sure what tracks and playlist operations may not be correct not sure.  Although, I am actually very suprised the parsing logic seems to stay compatible for these basic functions through all versions of FL atleast for the limited test items.
 
+
+2026-10-25 So 3 months has passed and I've started to look at this project again.
+Added partial skin will likely go with different button colour such as black maybe. Just testing the new skin, and a few new functions.
+There is some more stuff to get into the plugin hopefully will update over the news few days. Need to likely update some stuff due to changes
+in fl studio 26.2 flp, not sure how long that will take to add in could be a while the new up to 25 mixer slots will likely require some changes.
+It is very likely that for what is reported currently will not properly obtain information on mixer tracks 11 and higher currently.
+The new source is in FLPOrganizer folder and the new vst3 build is the FLPOraganizer.vst3. There is a lot that needs to be doen with this to update it.
+No timeline on how long it will take to update currently I will likely wait until 26.2 goes into full release version before I attempt to try to understand what is 
+going on with the flp format as at this point I really don't understand what has changed but I am guessing something has changed with how mixer tracks
+are treated it may just be "more"  count on how it is structure but it could be a total rewrite of the blobs and calls which would likely lead to this tool
+being fairly broken it will take time to figure out what the situation is.
+ 
+
 2026-07-26 a little more testing on automation. LFO was tested and determined 
 To Do:
 1. IN FLPToolkit's automation tool need to change from "single line" detection type to per point detection and get the drawing to be representative of the actual line and map the  tension to steps to properly graphically represent.
