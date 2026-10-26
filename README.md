@@ -16,8 +16,13 @@ being fairly broken it will take time to figure out what the situation is.
 
 TO DO - get the buttons more readable and contrastive currently metal on metal is making it a little obscured. Like to have "active" vs non active tab colour ratehr than the multicolour organizational tabbing. 
  
-ISSUES:  zip file count not updating on top right corner
+ISSUES:  
+-zip file count not updating on top right corner
+- right click open with functions are not opening currently specific version seems to be redirecting to most recent version likely due to registry entries
+- since fl studio I think uses entries in registry to associated the flp format itself the open with default option seems to be redirecting to the most recent registry entry.
+- likewise while the version launches are working its not actually loading on first launch the flp, I need to see if on second launch it loads if so there may need to be a check if that version of fl studio is open before sending the launch instruction for the flp to load in that version.
 
+- 
 2026-07-26 a little more testing on automation. LFO was tested and determined 
 To Do:
 1. IN FLPToolkit's automation tool need to change from "single line" detection type to per point detection and get the drawing to be representative of the actual line and map the  tension to steps to properly graphically represent.
