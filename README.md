@@ -4,7 +4,7 @@ WARNING: None of this is known to be correct, it is purely testing and experimen
 
 
 2026-10-25 So 3 months has passed and I've started to look at this project again.
-Added partial skin will likely go with different button colour such as black maybe. Just testing the new skin, and a few new functions.
+Added partial reskin will likely go with different button colour such as black maybe. Just testing the new skin, and a few new functions.
 There is some more stuff to get into the plugin hopefully will update over the news few days. Need to likely update some stuff due to changes
 in fl studio 26.2 flp, not sure how long that will take to add in could be a while the new up to 25 mixer slots will likely require some changes.
 It is very likely that for what is reported currently will not properly obtain information on mixer tracks 11 and higher currently.
